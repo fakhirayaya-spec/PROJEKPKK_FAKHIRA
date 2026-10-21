@@ -1,0 +1,298 @@
+:root {
+    --accent-amber: #fcae1e;
+    --accent-amber-hover: #e09b12;
+    --text-primary: #3d2314;
+    --text-secondary: #7a6e65;
+    --border-color: #e8e3dc;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+body {
+    /* BACKGROUND PAS FULL LAYAR DENGAN PROPORSIONAL */
+    background-color: #fceecb;
+    background-image: url('images/login.bg.jpeg');
+    background-repeat: no-repeat;
+    background-position: center center;
+    background-size: 100vw 100vh;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+/* CONTAINER & CARD */
+.login-container {
+    position: relative;
+    z-index: 10;
+    width: 100%;
+    max-width: 440px;
+    padding: 0 15px;
+}
+
+.login-card {
+    background: #ffffff;
+    border-radius: 24px;
+    padding: 24px 30px 24px 30px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12);
+    position: relative;
+    overflow: hidden;
+}
+
+/* 1. HIASAN LEKUKAN KUNING DI UJUNG ATAS KIRI */
+.login-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 130px;
+    height: 60px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 130 60'%3E%3Cpath fill='%23fcae1e' d='M0 0h130C90 0 50 45 0 60V0z'/%3E%3C/svg%3E") no-repeat top left;
+    background-size: contain;
+    z-index: 1;
+    pointer-events: none;
+}
+
+/* 2. HIASAN LEKUKAN COKELAT DI UJUNG BAWAH KANAN */
+.login-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 140px;
+    height: 65px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 65'%3E%3Cpath fill='%23522a10' d='M140 65H0c50 0 90-45 140-65v65z'/%3E%3C/svg%3E") no-repeat bottom right;
+    background-size: contain;
+    z-index: 1;
+    pointer-events: none;
+}
+
+/* HEADER SECTION */
+.login-header {
+    text-align: center;
+    margin-bottom: 16px;
+    position: relative;
+    z-index: 2;
+}
+
+.logo-wrapper {
+    display: inline-block;
+    margin-bottom: 8px;
+}
+
+/* LOGO DIBUAT LEBIH BESAR PAS DENGAN DESAIN TARGET */
+.logo-wrapper img {
+    width: 105px;
+    height: auto;
+    object-fit: contain;
+}
+
+.login-header h1 {
+    font-size: 1.65rem;
+    font-weight: 800;
+    color: #2b170c;
+    margin-bottom: 4px;
+}
+
+.login-header p {
+    font-size: 0.82rem;
+    color: #8c827a;
+    font-weight: 500;
+    line-height: 1.35;
+}
+
+/* FORM INPUTS */
+.login-form {
+    position: relative;
+    z-index: 2;
+}
+
+.form-group {
+    margin-bottom: 12px;
+}
+
+.input-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-icon {
+    position: absolute;
+    left: 14px;
+    display: flex;
+    align-items: center;
+    z-index: 2;
+}
+
+.input-container input {
+    width: 100%;
+    padding: 11px 14px 11px 42px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    font-size: 0.85rem;
+    outline: none;
+    background: #ffffff;
+    color: var(--text-primary);
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.input-container input::placeholder {
+    color: #a8a098;
+}
+
+.input-container input:focus {
+    border-color: var(--accent-amber);
+    box-shadow: 0 0 0 3px rgba(252, 174, 30, 0.15);
+}
+
+/* TOGGLE PASSWORD */
+.toggle-password {
+    position: absolute;
+    right: 12px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    z-index: 2;
+}
+
+/* OPTIONS (REMEMBER & FORGOT) */
+.form-options {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    font-size: 0.8rem;
+    position: relative;
+    z-index: 2;
+}
+
+.checkbox-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #70665f;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.checkbox-wrapper input {
+    accent-color: var(--accent-amber);
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+}
+
+.forgot-link {
+    color: #f59e0b;
+    text-decoration: none;
+    font-weight: 700;
+}
+
+.forgot-link:hover {
+    text-decoration: underline;
+}
+
+/* TOMBOL UTAMA */
+.login-btn {
+    width: 100%;
+    padding: 12px;
+    background: linear-gradient(90deg, #fcae1e 0%, #f7931e 100%);
+    color: #ffffff;
+    border: none;
+    border-radius: 25px;
+    font-size: 0.92rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(247, 147, 30, 0.3);
+    transition: all 0.2s ease;
+    position: relative;
+    z-index: 2;
+}
+
+.login-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 15px rgba(247, 147, 30, 0.4);
+}
+
+/* DIVIDER */
+.divider {
+    display: flex;
+    align-items: center;
+    margin: 16px 0 14px 0;
+    color: #b5aba2;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    position: relative;
+    z-index: 2;
+}
+
+.divider::before, .divider::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid #efe8e0;
+}
+
+.divider span {
+    padding: 0 10px;
+}
+
+/* SOCIAL BUTTONS */
+.social-login {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+    position: relative;
+    z-index: 2;
+}
+
+.social-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 9px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: #ffffff;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #4a3e36;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.social-btn:hover {
+    background-color: #faf8f5;
+}
+
+/* SIGNUP LINK */
+.signup-link {
+    text-align: center;
+    font-size: 0.8rem;
+    color: #70665f;
+    font-weight: 500;
+    position: relative;
+    z-index: 2;
+}
+
+.signup-link a {
+    color: #f59e0b;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.signup-link a:hover {
+    text-decoration: underline;
+}
