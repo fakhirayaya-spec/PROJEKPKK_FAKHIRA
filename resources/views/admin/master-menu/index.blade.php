@@ -188,7 +188,7 @@
                     @forelse($kategoris as $k)
                         <li class="list-group-item d-flex justify-content-between align-items-center" style="font-size: 13px;">
                             {{ $k->nama_kategori }}
-                            <form action="{{ route('admin.kategori-menu.destroy', $k) }}" method="POST" onsubmit="return confirm('Hapus kategori ini?')">
+                            <form action="{{ route('admin.kategori-menu.destroy', $k) }}" method="POST" data-konfirmasi="Hapus kategori ini?">
                                 @csrf @method('DELETE')
                                 <button type="submit" class="btn btn-sm text-danger border-0"><i class="bi bi-trash"></i></button>
                             </form>

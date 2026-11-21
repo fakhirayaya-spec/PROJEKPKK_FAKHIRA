@@ -9,15 +9,22 @@ use App\Http\Controllers\Admin\KategoriMenuController;
 use App\Http\Controllers\Admin\KasirController;
 use App\Http\Controllers\Admin\StokController;
 use App\Http\Controllers\Admin\BumbuController;
+use App\Http\Controllers\Admin\StokOperasionalController as AdminStokOperasionalController;
+use App\Http\Controllers\Admin\BahanOperasionalController;
 use App\Http\Controllers\Admin\RiwayatTransaksiController;
 use App\Http\Controllers\Admin\LaporanController;
 use App\Http\Controllers\Admin\PengeluaranController;
 use App\Http\Controllers\Admin\ProfilController as AdminProfilController;
 use App\Http\Controllers\Kasir\DashboardController as KasirDashboardController;
 use App\Http\Controllers\Kasir\StokController as KasirStokController;
+use App\Http\Controllers\Kasir\StokOperasionalController as KasirStokOperasionalController;
 use App\Http\Controllers\Kasir\ProfilController as KasirProfilController;
 use App\Http\Controllers\Kasir\TransaksiController as KasirTransaksiController;
 use App\Http\Controllers\Kasir\RiwayatController as KasirRiwayatController;
+
+// {kasir} hanya boleh angka (id). Tanpa ini, PUT /kasir/profil (ganti foto kasir) ikut tertangkap
+// rute admin PUT /kasir/{kasir}, lalu dianggap id "profil" dan hasilnya 404 Not Found.
+Route::pattern('kasir', '[0-9]+');
 
 Route::get('/', function () {
     return view('auth.login');
@@ -40,6 +47,16 @@ Route::middleware(['auth', 'role:admin'])->group(function () use ($rutePreorderL
     Route::get('/stok', [StokController::class, 'index'])->name('admin.stok.index');
     Route::post('/stok/{menu}/tambah', [StokController::class, 'tambahStok'])->name('admin.stok.tambah');
     Route::get('/stok/{menu}/riwayat', [StokController::class, 'riwayat'])->name('admin.stok.riwayat');
+    // Stok operasional per kasir (gas, minyak, dus, cup, es batu): admin lihat semua, isi ulang, riwayat
+    Route::get('/stok-operasional', [AdminStokOperasionalController::class, 'index'])->name('admin.stok-operasional.index');
+    Route::get('/stok-operasional/riwayat', [AdminStokOperasionalController::class, 'riwayat'])->name('admin.stok-operasional.riwayat');
+    Route::post('/stok-operasional/{user}/isi-ulang', [AdminStokOperasionalController::class, 'isiUlang'])->name('admin.stok-operasional.isi-ulang');
+    // Kelola daftar bahan operasional (tambah bahan baru, aturan, gambar, nonaktifkan, hapus)
+    Route::get('/stok-operasional/bahan', [BahanOperasionalController::class, 'index'])->name('admin.stok-operasional.bahan.index');
+    Route::post('/stok-operasional/bahan', [BahanOperasionalController::class, 'store'])->name('admin.stok-operasional.bahan.store');
+    Route::put('/stok-operasional/bahan/{bahan}', [BahanOperasionalController::class, 'update'])->name('admin.stok-operasional.bahan.update');
+    Route::patch('/stok-operasional/bahan/{bahan}/toggle', [BahanOperasionalController::class, 'toggle'])->name('admin.stok-operasional.bahan.toggle');
+    Route::delete('/stok-operasional/bahan/{bahan}', [BahanOperasionalController::class, 'destroy'])->name('admin.stok-operasional.bahan.destroy');
     // Manajemen bumbu (bumbu tabur & saus)
     Route::get('/bumbu', [BumbuController::class, 'index'])->name('admin.bumbu.index');
     Route::post('/bumbu', [BumbuController::class, 'store'])->name('admin.bumbu.store');
@@ -87,6 +104,9 @@ Route::middleware(['auth', 'role:kasir'])->prefix('kasir')->name('kasir.')->grou
 
     Route::get('/stok', [KasirStokController::class, 'index'])->name('stok.index');
 
+    // Stok operasional milik kasir sendiri (read-only) + riwayat pemakaiannya
+    Route::get('/stok-operasional', [KasirStokOperasionalController::class, 'index'])->name('stok-operasional.index');
+
     Route::get('/riwayat', [KasirRiwayatController::class, 'index'])->name('riwayat.index');
 
     // Pre-order: kasir yang mengerjakan (buat, ubah, ganti status, selesaikan, batalkan)
@@ -111,6 +131,9 @@ Route::middleware(['auth', 'role:kasir'])->prefix('kasir')->name('kasir.')->grou
 
 // ============ PROFIL (SEMUA ROLE, dipakai bersama) ============
 Route::middleware('auth')->group(function () {
+    // Gambar bahan operasional (dilihat admin & kasir)
+    Route::get('/bahan-operasional/{bahan}/gambar', [BahanOperasionalController::class, 'gambar'])->name('bahan-operasional.gambar');
+
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');

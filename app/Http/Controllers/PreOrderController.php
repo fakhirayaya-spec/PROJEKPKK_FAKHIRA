@@ -21,12 +21,33 @@ class PreOrderController extends Controller
         return auth()->user()->role === 'admin' ? 'admin.preorder.' : 'kasir.preorder.';
     }
 
+    /** Kasir hanya boleh mengakses PO yang dibuat dari akunnya sendiri. Admin dapat memantau semua PO. */
+    private function batasiMilikKasir($query)
+    {
+        if (auth()->user()->role === 'kasir') {
+            $query->where('user_id', auth()->id());
+        }
+
+        return $query;
+    }
+
+    private function pastikanPemilikPreOrder(PreOrder $preorder): void
+    {
+        abort_unless(
+            auth()->user()->role === 'admin' || (int) $preorder->user_id === (int) auth()->id(),
+            403,
+            'Pre-order ini dibuat oleh kasir lain dan tidak dapat diakses dari akun ini.'
+        );
+    }
+
     public function index(Request $request)
     {
         $status = $request->query('status', 'aktif');
         $q = trim((string) $request->query('q', ''));
 
-        $query = PreOrder::with(['items', 'pembuat'])->withCount('items');
+        $query = $this->batasiMilikKasir(PreOrder::query())
+            ->with(['items', 'pembuat'])
+            ->withCount('items');
 
         if ($status === 'aktif') {
             $query->aktif();
@@ -53,9 +74,15 @@ class PreOrderController extends Controller
 
         $preorders = $query->paginate(12)->withQueryString();
 
-        $hitung = PreOrder::selectRaw('status, COUNT(*) as jumlah')->groupBy('status')->pluck('jumlah', 'status');
-        $ambilHariIni = PreOrder::aktif()->whereDate('tanggal_ambil', today())->count();
-        $terlambat = PreOrder::aktif()->whereDate('tanggal_ambil', '<', today())->count();
+        // Ringkasan kasir juga harus mengikuti PO miliknya sendiri, bukan seluruh PO.
+        $hitung = $this->batasiMilikKasir(PreOrder::query())
+            ->selectRaw('status, COUNT(*) as jumlah')
+            ->groupBy('status')
+            ->pluck('jumlah', 'status');
+        $ambilHariIni = $this->batasiMilikKasir(PreOrder::aktif())
+            ->whereDate('tanggal_ambil', today())->count();
+        $terlambat = $this->batasiMilikKasir(PreOrder::aktif())
+            ->whereDate('tanggal_ambil', '<', today())->count();
 
         return view('preorder.index', [
             'rp' => $this->rp(),
@@ -91,11 +118,12 @@ class PreOrderController extends Controller
     {
         $data = $request->validate([
             'nama_pelanggan' => ['required', 'string', 'max:100'],
-            'no_whatsapp' => ['nullable', 'string', 'max:20', 'regex:/^[0-9+\-\s]{8,20}$/'],
+            'no_whatsapp' => ['nullable', 'digits:13'],
             'tanggal_ambil' => ['required', 'date', 'after_or_equal:today'],
             'jam_ambil' => ['nullable', 'date_format:H:i'],
             'catatan' => ['nullable', 'string', 'max:500'],
-            'dp' => ['nullable', 'integer', 'min:0'],
+            'dp' => ['required', 'integer', 'min:1'],
+            'dp_metode' => ['required', 'in:cash,qris'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.menu_id' => ['required', 'integer'],
             'items.*.ukuran' => ['required', 'in:' . implode(',', array_keys(TransaksiController::UKURAN_EXTRA))],
@@ -105,9 +133,19 @@ class PreOrderController extends Controller
         ], [
             'items.required' => 'Tambahkan minimal satu menu ke pesanan.',
             'items.min' => 'Tambahkan minimal satu menu ke pesanan.',
-            'no_whatsapp.regex' => 'Nomor WhatsApp hanya boleh angka (boleh diawali + atau 0), minimal 8 digit.',
+            'no_whatsapp.digits' => 'Nomor WhatsApp harus tepat 13 digit angka (tanpa spasi atau tanda lain).',
             'tanggal_ambil.after_or_equal' => 'Tanggal ambil tidak boleh sebelum hari ini.',
+            'dp.required' => 'DP / uang muka wajib diisi (minimal ' . PreOrder::DP_MIN_PERSEN . '% dari total pesanan).',
+            'dp.min' => 'DP / uang muka wajib diisi (minimal ' . PreOrder::DP_MIN_PERSEN . '% dari total pesanan).',
+            'dp_metode.required' => 'Pilih DP dibayar lewat Cash atau QRIS.',
         ]);
+
+        $jumlahPcs = array_sum(array_map(fn ($i) => (int) $i['qty'], $data['items']));
+        if ($jumlahPcs < PreOrder::MIN_PCS) {
+            throw ValidationException::withMessages([
+                'items' => 'Pre-order minimal ' . PreOrder::MIN_PCS . ' pcs produk. Pesanan ini baru ' . $jumlahPcs . ' pcs.',
+            ]);
+        }
 
         $preorder = DB::transaction(function () use ($data) {
             $total = 0;
@@ -119,10 +157,17 @@ class PreOrderController extends Controller
                 $itemsSiap[] = $siap;
             }
 
-            $dp = (int) ($data['dp'] ?? 0);
+            $dp = (int) $data['dp'];
             if ($dp > $total) {
                 throw ValidationException::withMessages([
                     'dp' => 'DP (Rp ' . number_format($dp, 0, ',', '.') . ') tidak boleh lebih besar dari total pesanan (Rp ' . number_format($total, 0, ',', '.') . ').',
+                ]);
+            }
+
+            $dpMin = PreOrder::dpMinimal($total);
+            if ($dp < $dpMin) {
+                throw ValidationException::withMessages([
+                    'dp' => 'DP wajib minimal ' . PreOrder::DP_MIN_PERSEN . '% dari total pesanan: Rp ' . number_format($dpMin, 0, ',', '.') . ' dari total Rp ' . number_format($total, 0, ',', '.') . '.',
                 ]);
             }
 
@@ -141,6 +186,13 @@ class PreOrderController extends Controller
 
             $preorder->items()->createMany($itemsSiap);
 
+            // Stok menu + saus + bubuk langsung berkurang begitu pesanan dibuat.
+            // Kalau stok ada yang kurang, pesanan batal dibuat dan alasannya muncul di form.
+            $preorder->potongStokJikaBelum(auth()->user());
+
+            // DP langsung tercatat sebagai pemasukan sebesar DP
+            $preorder->catatDp(auth()->user(), $dp, $data['dp_metode']);
+
             return $preorder;
         });
 
@@ -152,7 +204,7 @@ class PreOrderController extends Controller
      *  - menu bersaus  : saus terkunci, bubuk tabur opsional & gratis
      *  - menu berbubuk : bubuk terkunci, saus tambahan opsional (+Rp 3.000)
      *  - lainnya       : tanpa pilihan bumbu
-     * Stok belum dipotong di sini; baru dipotong saat pre-order diselesaikan.
+     * Stok dipotong di store() begitu pesanan dibuat (bukan di sini).
      */
     private function olahItem(array $item): array
     {
@@ -216,6 +268,7 @@ class PreOrderController extends Controller
 
     public function show(PreOrder $preorder)
     {
+        $this->pastikanPemilikPreOrder($preorder);
         $preorder->load(['items.menu', 'pembuat', 'transaksi']);
 
         return view('preorder.show', ['rp' => $this->rp(), 'po' => $preorder]);
@@ -224,18 +277,23 @@ class PreOrderController extends Controller
     /** Ubah data pelanggan / jadwal ambil / catatan / DP (isi pesanan tidak diubah di sini) */
     public function update(Request $request, PreOrder $preorder)
     {
+        $this->pastikanPemilikPreOrder($preorder);
         abort_unless($preorder->aktif, 403, 'Pre-order yang sudah selesai atau dibatalkan tidak bisa diubah.');
 
         $data = $request->validate([
             'nama_pelanggan' => ['required', 'string', 'max:100'],
-            'no_whatsapp' => ['nullable', 'string', 'max:20', 'regex:/^[0-9+\-\s]{8,20}$/'],
+            'no_whatsapp' => array_merge(['nullable', 'string', 'max:20'], $request->input('no_whatsapp') === $preorder->no_whatsapp ? [] : ['digits:13']),
             'tanggal_ambil' => ['required', 'date'],
             'jam_ambil' => ['nullable', 'date_format:H:i'],
             'catatan' => ['nullable', 'string', 'max:500'],
             'dp' => ['nullable', 'integer', 'min:0'],
+            'dp_metode' => ['nullable', 'in:cash,qris'],
         ], [
-            'no_whatsapp.regex' => 'Nomor WhatsApp hanya boleh angka (boleh diawali + atau 0), minimal 8 digit.',
+            'no_whatsapp.digits' => 'Nomor WhatsApp harus tepat 13 digit angka (tanpa spasi atau tanda lain).',
         ]);
+
+        $metodeDp = ($data['dp_metode'] ?? 'cash') === 'qris' ? 'qris' : 'cash';
+        unset($data['dp_metode']);
 
         $data['dp'] = (int) ($data['dp'] ?? 0);
         if ($data['dp'] > $preorder->total) {
@@ -244,7 +302,29 @@ class PreOrderController extends Controller
             ]);
         }
 
-        $preorder->update($data);
+        $dpMin = PreOrder::dpMinimal((int) $preorder->total);
+        if ($data['dp'] < $dpMin) {
+            throw ValidationException::withMessages([
+                'dp' => 'DP wajib minimal ' . PreOrder::DP_MIN_PERSEN . '% dari total pesanan: Rp ' . number_format($dpMin, 0, ',', '.') . ' dari total Rp ' . number_format($preorder->total, 0, ',', '.') . '.',
+            ]);
+        }
+
+        // DP hanya boleh ditambah (DP yang sudah diterima sudah tercatat sebagai pemasukan)
+        $dpLama = (int) $preorder->dp;
+        if ($data['dp'] < $dpLama) {
+            throw ValidationException::withMessages([
+                'dp' => 'DP tidak bisa dikurangi (DP yang sudah diterima Rp ' . number_format($dpLama, 0, ',', '.') . '). Kalau pesanan batal, gunakan tombol Batalkan.',
+            ]);
+        }
+
+        DB::transaction(function () use ($preorder, $data, $dpLama, $metodeDp) {
+            $preorder->update($data);
+
+            // Tambahan DP dicatat sebagai pemasukan sebesar selisihnya
+            if ($data['dp'] > $dpLama) {
+                $preorder->catatDp(auth()->user(), $data['dp'] - $dpLama, $metodeDp);
+            }
+        });
 
         return redirect()->route($this->rp() . 'show', $preorder)->with('sukses', 'Data pre-order diperbarui.');
     }
@@ -252,20 +332,27 @@ class PreOrderController extends Controller
     /** Maju satu tahap: baru -> diproses -> siap */
     public function status(Request $request, PreOrder $preorder)
     {
+        $this->pastikanPemilikPreOrder($preorder);
         $data = $request->validate(['ke' => ['required', 'in:diproses,siap']]);
 
         $urutan = ['baru' => 0, 'diproses' => 1, 'siap' => 2];
         abort_unless($preorder->aktif && $urutan[$data['ke']] > $urutan[$preorder->status], 403, 'Status tidak bisa diubah ke tahap itu.');
 
-        $preorder->update(['status' => $data['ke']]);
+        if ($data['ke'] === 'diproses') {
+            $preorder->proses(auth()->user());   // stok sudah berkurang sejak pesanan dibuat
+            $pesan = 'Status diubah menjadi "' . PreOrder::LABEL_STATUS['diproses'] . '".';
+        } else {
+            $preorder->tandaiSiap(auth()->user());
+            $pesan = 'Status diubah menjadi "' . PreOrder::LABEL_STATUS['siap'] . '".';
+        }
 
-        return redirect()->route($this->rp() . 'show', $preorder)
-            ->with('sukses', 'Status diubah menjadi "' . PreOrder::LABEL_STATUS[$data['ke']] . '".');
+        return redirect()->route($this->rp() . 'show', $preorder)->with('sukses', $pesan);
     }
 
-    /** Pesanan diambil & dilunasi -> otomatis jadi transaksi (masuk riwayat, laporan, dan stok berkurang) */
+    /** Pesanan diambil & dilunasi -> sisa pembayaran tercatat sebagai transaksi pelunasan (DP sudah tercatat lebih dulu) */
     public function selesai(Request $request, PreOrder $preorder)
     {
+        $this->pastikanPemilikPreOrder($preorder);
         abort_unless($preorder->aktif, 403, 'Pre-order ini sudah selesai atau dibatalkan.');
 
         $data = $request->validate([
@@ -284,6 +371,7 @@ class PreOrderController extends Controller
 
     public function batal(Request $request, PreOrder $preorder)
     {
+        $this->pastikanPemilikPreOrder($preorder);
         abort_unless($preorder->aktif, 403, 'Pre-order ini sudah selesai atau dibatalkan.');
 
         $data = $request->validate([
@@ -293,7 +381,8 @@ class PreOrderController extends Controller
             'alasan.min' => 'Alasan pembatalan terlalu pendek.',
         ]);
 
-        $preorder->update(['status' => 'dibatalkan', 'alasan_batal' => $data['alasan']]);
+        // Stok dikembalikan hanya kalau masih "Baru". DP TIDAK dikembalikan ke pelanggan (tetap jadi pemasukan)
+        $preorder->batalkan(auth()->user(), $data['alasan']);
 
         return redirect()->route($this->rp() . 'show', $preorder)->with('sukses', 'Pre-order dibatalkan.');
     }

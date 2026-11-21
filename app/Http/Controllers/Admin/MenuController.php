@@ -7,6 +7,7 @@ use App\Models\Bumbu;
 use App\Models\KategoriMenu;
 use App\Models\Menu;
 use App\Models\PergerakanStok;
+use App\Services\StokService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -64,6 +65,7 @@ class MenuController extends Controller
         $menu = Menu::create($data);
 
         if ($menu->stok > 0) {
+            StokService::sinkron($menu, 'Stok awal saat menu dibuat');
             PergerakanStok::create([
                 'menu_id' => $menu->id,
                 'user_id' => auth()->id(),
@@ -135,8 +137,11 @@ class MenuController extends Controller
             'saus_bawaan_id' => 'nullable|exists:bumbus,id',
             'bubuk_bawaan_id' => 'nullable|exists:bumbus,id',
             'deskripsi' => 'nullable|string',
-            'gambar' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
+            'gambar' => 'nullable|image|mimes:jpg,jpeg,png|max:5120',
             'status' => 'required|in:aktif,nonaktif',
+        ], [
+            'gambar.max' => 'Ukuran foto maksimal 5 MB.',
+            'gambar.uploaded' => 'Foto gagal diunggah. Ukuran maksimal 5 MB (dan batas upload di php.ini minimal 5M).',
         ]);
 
         $data['harga_modal'] = (int) ($data['harga_modal'] ?? 0);

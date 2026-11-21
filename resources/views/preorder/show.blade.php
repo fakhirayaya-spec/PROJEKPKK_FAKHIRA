@@ -38,7 +38,7 @@
 
         @if($po->status === 'dibatalkan')
             <div class="alert alert-danger"><b><i class="bi bi-x-octagon"></i> Pre-order dibatalkan.</b> Alasan: {{ $po->alasan_batal ?? '-' }}.
-                @if($po->dp > 0) <div class="small mt-1">DP Rp {{ number_format($po->dp, 0, ',', '.') }} perlu dikembalikan atau diurus dengan pelanggan.</div> @endif
+                @if($po->dp > 0) <div class="small mt-1">DP Rp {{ number_format($po->dp, 0, ',', '.') }} tidak dikembalikan ke pelanggan dan tetap tercatat sebagai pemasukan.</div> @endif
             </div>
         @elseif($po->status === 'selesai')
             <div class="alert alert-success"><b><i class="bi bi-check-circle"></i> Pre-order selesai</b> dan tercatat sebagai transaksi
@@ -161,14 +161,19 @@
                     <div class="col-12"><label class="form-label small fw-semibold">Nama pemesan</label>
                         <input type="text" name="nama_pelanggan" value="{{ old('nama_pelanggan', $po->nama_pelanggan) }}" required maxlength="100" class="form-control"></div>
                     <div class="col-12"><label class="form-label small fw-semibold">No. WhatsApp</label>
-                        <input type="text" name="no_whatsapp" value="{{ old('no_whatsapp', $po->no_whatsapp) }}" class="form-control"></div>
+                        <input type="text" name="no_whatsapp" value="{{ old('no_whatsapp', $po->no_whatsapp) }}" inputmode="numeric" maxlength="20" class="form-control" placeholder="13 digit">
+                        <div class="form-text">Kalau diisi harus tepat 13 digit angka.</div></div>
                     <div class="col-7"><label class="form-label small fw-semibold">Tanggal ambil</label>
                         <input type="date" name="tanggal_ambil" value="{{ old('tanggal_ambil', $po->tanggal_ambil->format('Y-m-d')) }}" required class="form-control"></div>
                     <div class="col-5"><label class="form-label small fw-semibold">Jam</label>
                         <input type="time" name="jam_ambil" value="{{ old('jam_ambil', $po->jam_ambil) }}" class="form-control"></div>
                     <div class="col-12"><label class="form-label small fw-semibold">DP (Rp)</label>
-                        <input type="number" min="0" max="{{ $po->total }}" name="dp" value="{{ old('dp', $po->dp) }}" class="form-control">
-                        <div class="form-text">Total pesanan Rp {{ number_format($po->total, 0, ',', '.') }}.</div></div>
+                        <input type="number" min="{{ max($po->dp, \App\Models\PreOrder::dpMinimal((int) $po->total)) }}" max="{{ $po->total }}" name="dp" value="{{ old('dp', $po->dp) }}" class="form-control">
+                        <div class="form-text">Total pesanan Rp {{ number_format($po->total, 0, ',', '.') }}. DP minimal {{ \App\Models\PreOrder::DP_MIN_PERSEN }}% dari total (Rp {{ number_format(\App\Models\PreOrder::dpMinimal((int) $po->total), 0, ',', '.') }}) dan hanya bisa ditambah (sudah diterima Rp {{ number_format($po->dp, 0, ',', '.') }}); tambahannya masuk pemasukan hari ini.</div>
+                        <select name="dp_metode" class="form-select form-select-sm mt-2">
+                            <option value="cash">Tambahan DP lewat Cash</option>
+                            <option value="qris">Tambahan DP lewat QRIS</option>
+                        </select></div>
                     <div class="col-12"><label class="form-label small fw-semibold">Catatan</label>
                         <textarea name="catatan" rows="2" maxlength="500" class="form-control">{{ old('catatan', $po->catatan) }}</textarea></div>
                 </div>
@@ -206,7 +211,7 @@
                     </div>
                     <div class="d-flex justify-content-between mt-2"><span class="small" id="labelKembali">Kembalian</span><b id="nilaiKembali">Rp 0</b></div>
                 </div>
-                <div class="small text-muted mt-3">Setelah ini pesanan otomatis tercatat sebagai transaksi, stok menu dan bumbu berkurang.</div>
+                <div class="small text-muted mt-3">Pelunasan tercatat sebagai pemasukan sebesar sisa pembayaran (DP sudah dihitung saat diterima). Stok sudah berkurang sejak pesanan dibuat.</div>
             </div>
             <div class="modal-footer"><button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Kembali</button><button class="btn btn-potato btn-sm" id="btnSelesai">Selesaikan</button></div>
         </form>
@@ -220,7 +225,7 @@
             @csrf
             <div class="modal-header"><h6 class="modal-title fw-bold">Batalkan {{ $po->kode_preorder }}?</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <div class="modal-body">
-                <p class="small text-muted">Stok tidak berubah karena belum dipotong. @if($po->dp > 0) DP Rp {{ number_format($po->dp, 0, ',', '.') }} perlu diurus dengan pelanggan. @endif</p>
+                <p class="small text-muted">@if($po->stok_dipotong && $po->status === 'baru') Stok yang sudah dikurangi akan dikembalikan. @elseif($po->stok_dipotong) Pesanan sudah diproses, jadi bahan dianggap terpakai dan stok tidak dikembalikan. @else Stok belum dikurangi, jadi tidak berubah. @endif @if($po->dp > 0) <b class="text-danger">DP Rp {{ number_format($po->dp, 0, ',', '.') }} tidak dapat dikembalikan ke pelanggan</b> dan tetap tercatat sebagai pemasukan. @endif</p>
                 <label class="form-label small fw-semibold">Alasan pembatalan <span class="text-danger">*</span></label>
                 <textarea name="alasan" rows="3" maxlength="150" required class="form-control" placeholder="Contoh: pelanggan membatalkan"></textarea>
             </div>

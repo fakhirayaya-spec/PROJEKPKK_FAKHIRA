@@ -34,8 +34,8 @@ class NewPasswordController extends Controller
         $request->validate([
             'token' => ['required'],
             'email' => ['required', 'email'],
-            'password' => ['required', 'confirmed', Rules\Password::defaults()],
-        ]);
+            'password' => array_merge(['required', 'confirmed'], \App\Support\AturanPassword::rules()),
+        ], \App\Support\AturanPassword::pesan());
 
         // Here we will attempt to reset the user's password. If it is successful we
         // will update the password on an actual user model and persist it to the

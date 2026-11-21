@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use App\Models\Bumbu;
 use App\Models\Menu;
+use App\Services\StokOperasionalService;
+use App\Support\FotoStorage;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
@@ -15,7 +17,15 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Foto (menu, kasir, admin, bahan) disimpan langsung di public/storage supaya selalu tampil,
+        // tanpa tergantung `php artisan storage:link`. Foto lama di storage/app/public dipindah otomatis (sekali).
+        config(['filesystems.disks.public.root' => public_path('storage')]);
+
+        try {
+            FotoStorage::siapkan(public_path('storage'), storage_path('app/public'), storage_path('framework/foto_tersinkron'));
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 
     /**
@@ -60,6 +70,13 @@ class AppServiceProvider extends ServiceProvider
                     ]));
             } catch (\Throwable $e) {
                 // tabel bumbu belum dimigrasi: lonceng tetap tampil tanpa data bumbu
+            }
+
+            // Stok operasional: kasir melihat miliknya, admin melihat semua kasir
+            try {
+                StokOperasionalService::alertUntuk(auth()->user())->each(fn ($a) => $alert->push($a));
+            } catch (\Throwable $e) {
+                // tabel stok operasional belum dimigrasi: lonceng tetap tampil tanpa data ini
             }
 
             $view->with('alertStok', $alert->sortBy(fn ($a) => $a['status'] === 'habis' ? 0 : 1)->values());

@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Menu;
 use App\Models\PergerakanStok;
+use App\Models\StokBatch;
+use App\Services\StokService;
 use Illuminate\Http\Request;
 
 class StokController extends Controller
@@ -26,7 +28,9 @@ class StokController extends Controller
             });
         }
 
-        return view('admin.manajemen-stok.index', compact('menus'));
+        $expMenu = StokService::expTerdekat('menu');
+
+        return view('admin.manajemen-stok.index', compact('menus', 'expMenu'));
     }
 
     public function tambahStok(Request $request, Menu $menu)
@@ -34,6 +38,7 @@ class StokController extends Controller
         $data = $request->validate([
             'jumlah' => 'required|integer|min:1',
             'keterangan' => 'nullable|string|max:150',
+            'tanggal_exp' => 'nullable|date|after_or_equal:today',
         ]);
 
         PergerakanStok::create([
@@ -45,7 +50,8 @@ class StokController extends Controller
             'tanggal' => now()->toDateString(),
         ]);
 
-        $menu->increment('stok', $data['jumlah']);
+        // Stok masuk dicatat sebagai batch dengan tanggal exp (default 14 hari / 2 minggu dari hari ini)
+        StokService::tambah($menu, (int) $data['jumlah'], $data['tanggal_exp'] ?? null, $data['keterangan'] ?? 'Restock manual');
 
         return back()->with('sukses', 'Stok "' . $menu->nama_menu . '" berhasil ditambahkan.');
     }
@@ -54,6 +60,8 @@ class StokController extends Controller
     {
         $riwayat = $menu->pergerakanStoks()->with('user')->latest('tanggal')->latest('id')->take(20)->get();
 
-        return view('admin.manajemen-stok.riwayat', compact('menu', 'riwayat'));
+        $batches = StokBatch::where('tipe', 'menu')->where('item_id', $menu->id)->orderByDesc('id')->take(10)->get();
+
+        return view('admin.manajemen-stok.riwayat', compact('menu', 'riwayat', 'batches'));
     }
 }

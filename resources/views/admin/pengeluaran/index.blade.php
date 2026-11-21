@@ -22,15 +22,26 @@
     @endif
 
     <div class="row g-3 mb-2">
-        <div class="col-12 col-lg-4">
+        <div class="col-6 col-lg-3">
             <div class="stat-card">
                 <div class="stat-icon red"><i class="bi bi-cash-stack"></i></div>
                 <div>
-                    <div class="stat-label">Total Pengeluaran {{ ($dari || $sampai) ? '(periode dipilih)' : '(semua periode)' }}</div>
-                    <div class="stat-value">Rp {{ number_format($totalPengeluaran, 0, ',', '.') }}</div>
+                    <div class="stat-label">Total {{ ($dari || $sampai) ? '(periode dipilih)' : '(semua periode)' }}</div>
+                    <div class="stat-value" style="font-size: 1.1rem;">Rp {{ number_format((int) $perKategori->sum(), 0, ',', '.') }}</div>
                 </div>
             </div>
         </div>
+        @foreach (['operasional' => ['blue', 'bi-gear'], 'bahan_baku' => ['amber', 'bi-basket'], 'lainnya' => ['brown', 'bi-three-dots']] as $kunci => [$warnaIkon, $ikon])
+            <div class="col-6 col-lg-3">
+                <div class="stat-card">
+                    <div class="stat-icon {{ $warnaIkon }}"><i class="bi {{ $ikon }}"></i></div>
+                    <div>
+                        <div class="stat-label">{{ $labelKategori[$kunci] }}</div>
+                        <div class="stat-value" style="font-size: 1.1rem;">Rp {{ number_format((int) ($perKategori[$kunci] ?? 0), 0, ',', '.') }}</div>
+                    </div>
+                </div>
+            </div>
+        @endforeach
     </div>
     <p class="text-muted small mb-3">
         <i class="bi bi-info-circle"></i> Semua kategori dicatat di sini buat pelacakan kas keluar. Tapi khusus di
@@ -93,7 +104,7 @@
                         <td class="text-end fw-bold text-potato-brown">Rp {{ number_format($p->jumlah, 0, ',', '.') }}</td>
                         <td class="text-center">
                             <form action="{{ route('admin.pengeluaran.destroy', $p) }}" method="POST"
-                                  onsubmit="return confirm('Hapus catatan pengeluaran ini?')">
+                                  data-konfirmasi="Hapus catatan pengeluaran ini? Angka laporan ikut berubah.">
                                 @csrf @method('DELETE')
                                 <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
                             </form>
@@ -125,15 +136,12 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label small fw-semibold">Kategori</label>
-                        <select name="kategori" class="form-select" required>
-                            @foreach($labelKategori as $key => $label)
-                                <option value="{{ $key }}">{{ $label }}</option>
-                            @endforeach
-                        </select>
+                        <div><span class="badge-soft gray" id="badgeKategori">Otomatis dari keterangan</span></div>
+                        <div class="form-text">Kategori tidak dipilih manual: barang/bahan (kentang, saus, bubuk, minuman, minyak, es batu) masuk <b>Bahan Baku</b>, biaya lain (gas, kemasan, listrik, gaji, dll.) masuk <b>Operasional</b>.</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label small fw-semibold">Keterangan</label>
-                        <input type="text" name="deskripsi" class="form-control" placeholder="Contoh: Beli minyak goreng 5L" required>
+                        <input type="text" name="deskripsi" id="inpDeskripsi" class="form-control" placeholder="Contoh: Beli minyak goreng 5L" required>
                     </div>
                     <div class="mb-2">
                         <label class="form-label small fw-semibold">Jumlah (Rp)</label>
@@ -149,3 +157,26 @@
     </div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+    // Menampilkan kategori otomatis saat mengetik keterangan (aturan katanya sama dengan yang dipakai server).
+    (function () {
+        const kataOps = @json(\App\Support\KategoriPengeluaran::kataOperasional());
+        const kataBahan = @json(\App\Support\KategoriPengeluaran::kataBahanBaku());
+        const buat = (kata) => new RegExp('(^|[^\\p{L}\\p{N}])(' + kata.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')', 'iu');
+        const reOps = buat(kataOps), reBahan = buat(kataBahan);
+        const inp = document.getElementById('inpDeskripsi');
+        const badge = document.getElementById('badgeKategori');
+        if (!inp || !badge) return;
+
+        inp.addEventListener('input', () => {
+            const t = inp.value.trim();
+            if (!t) { badge.className = 'badge-soft gray'; badge.textContent = 'Otomatis dari keterangan'; return; }
+            const bahan = !reOps.test(t) && reBahan.test(t);
+            badge.className = 'badge-soft ' + (bahan ? 'amber' : 'blue');
+            badge.textContent = bahan ? 'Bahan Baku' : 'Operasional';
+        });
+    })();
+</script>
+@endpush

@@ -63,6 +63,9 @@
         @endif
 
         <hr>
+        @if(($transaksi->jenis ?? 'penjualan') === 'dp')
+            <div style="font-size: 12px;">Uang muka (DP) pre-order {{ $transaksi->preOrderAsal->kode_preorder ?? '' }}</div>
+        @endif
         @foreach($transaksi->items as $item)
             <div class="baris-item">
                 <div class="d-flex justify-content-between" style="font-size: 12px;">
@@ -76,10 +79,26 @@
         @endforeach
         <hr>
 
-        <div class="d-flex justify-content-between fw-bold" style="font-size: 14px;">
-            <span>TOTAL</span>
-            <span>Rp {{ number_format($transaksi->total, 0, ',', '.') }}</span>
-        </div>
+        @php $jenisTrx = $transaksi->jenis ?? 'penjualan'; @endphp
+        @if($jenisTrx === 'pelunasan' && $transaksi->preOrder)
+            <div class="d-flex justify-content-between" style="font-size: 12px;">
+                <span>Total pesanan</span>
+                <span>Rp {{ number_format($transaksi->items->sum('subtotal'), 0, ',', '.') }}</span>
+            </div>
+            <div class="d-flex justify-content-between" style="font-size: 12px;">
+                <span>DP sudah dibayar</span>
+                <span>- Rp {{ number_format($transaksi->preOrder->dp, 0, ',', '.') }}</span>
+            </div>
+            <div class="d-flex justify-content-between fw-bold" style="font-size: 14px;">
+                <span>SISA DIBAYAR</span>
+                <span>Rp {{ number_format($transaksi->total, 0, ',', '.') }}</span>
+            </div>
+        @else
+            <div class="d-flex justify-content-between fw-bold" style="font-size: 14px;">
+                <span>{{ $jenisTrx === 'dp' ? 'DP DIBAYAR' : 'TOTAL' }}</span>
+                <span>Rp {{ number_format($transaksi->total, 0, ',', '.') }}</span>
+            </div>
+        @endif
         <div class="d-flex justify-content-between" style="font-size: 12px;">
             <span>Metode Bayar</span>
             <span>{{ strtoupper($transaksi->metode_bayar) }}</span>
@@ -89,12 +108,6 @@
                 <span>Pre-order</span>
                 <span>{{ $transaksi->preOrder->kode_preorder }}</span>
             </div>
-            @if($transaksi->preOrder->dp > 0)
-                <div class="d-flex justify-content-between" style="font-size: 12px;">
-                    <span>DP sebelumnya</span>
-                    <span>Rp {{ number_format($transaksi->preOrder->dp, 0, ',', '.') }}</span>
-                </div>
-            @endif
         @endif
         @if($transaksi->metode_bayar === 'cash' && $transaksi->uang_diterima !== null)
             <div class="d-flex justify-content-between" style="font-size: 12px;">

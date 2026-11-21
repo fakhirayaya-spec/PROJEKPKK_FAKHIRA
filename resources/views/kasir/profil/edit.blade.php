@@ -36,11 +36,11 @@
                         <i class="bi bi-camera"></i> Ganti Foto
                     </label>
                     @error('avatar') <div class="text-danger small mb-2">{{ $message }}</div> @enderror
-                    <div class="text-muted text-center" style="font-size: 11px;">JPG/PNG &middot; maks 2 MB</div>
+                    <div class="text-muted text-center" style="font-size: 11px;">JPG/PNG &middot; maks 5 MB</div>
                 </form>
 
                 @if($user->avatar)
-                    <form method="POST" action="{{ route('kasir.profil.foto') }}" onsubmit="return confirm('Hapus foto profil?')" class="mt-2">
+                    <form method="POST" action="{{ route('kasir.profil.foto') }}" data-konfirmasi="Hapus foto profil?" class="mt-2">
                         @csrf
                         @method('DELETE')
                         <button type="submit" class="btn btn-sm btn-outline-danger w-100">

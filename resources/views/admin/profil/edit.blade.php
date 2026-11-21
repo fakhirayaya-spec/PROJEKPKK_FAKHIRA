@@ -37,7 +37,7 @@
                 </form>
 
                 @if($user->avatar)
-                    <form method="POST" action="{{ route('admin.profil.foto') }}" onsubmit="return confirm('Hapus foto profil?')">
+                    <form method="POST" action="{{ route('admin.profil.foto') }}" data-konfirmasi="Hapus foto profil?">
                         @csrf
                         @method('DELETE')
                         <button type="submit" class="btn btn-sm btn-outline-danger w-100">

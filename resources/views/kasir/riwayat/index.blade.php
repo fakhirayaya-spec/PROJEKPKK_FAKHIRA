@@ -26,12 +26,13 @@
                 <tbody>
                     @forelse($transaksis as $trx)
                         <tr>
-                            <td class="fw-bold text-potato-brown">{{ $trx->kode_transaksi }}</td>
+                            <td class="fw-bold text-potato-brown">{{ $trx->kode_transaksi }}
+                            @if(($trx->jenis ?? 'penjualan') === 'dp')<span class="badge-soft amber ms-1">DP PO</span>@elseif(($trx->jenis ?? 'penjualan') === 'pelunasan')<span class="badge-soft blue ms-1">Pelunasan PO</span>@endif</td>
                             <td class="text-muted">{{ $trx->created_at->format('d M Y, H:i') }}</td>
                             <td><span class="badge bg-light text-dark border">{{ ucfirst($trx->metode_bayar) }}</span></td>
                             <td class="text-end fw-bold text-potato-brown {{ $trx->dibatalkan ? 'text-decoration-line-through text-muted' : '' }}">Rp {{ number_format($trx->total, 0, ',', '.') }}</td>
                             <td class="text-center">
-                                <span class="badge {{ $trx->dibatalkan ? 'bg-danger-subtle text-danger border border-danger' : 'bg-success-subtle text-success border border-success' }}">{{ $trx->dibatalkan ? 'Dibatalkan' : 'Selesai' }}</span>
+                                @php $st = \App\Support\StatusTransaksi::untuk($trx); @endphp<span class="badge-soft {{ $st['warna'] }}">{{ $st['label'] }}</span>
                             </td>
                             <td class="text-center">
                                 <a href="{{ route('kasir.transaksi.struk', $trx) }}" class="btn btn-sm btn-outline-secondary">

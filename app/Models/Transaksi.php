@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Http\Controllers\Kasir\TransaksiController;
+use App\Services\StokOperasionalService;
+use App\Services\StokService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -14,6 +16,8 @@ class Transaksi extends Model
 
     protected $fillable = [
         'kode_transaksi',
+        'jenis',
+        'pre_order_id',
         'user_id',
         'metode_bayar',
         'total',
@@ -44,10 +48,16 @@ class Transaksi extends Model
         return $this->hasMany(TransaksiItem::class);
     }
 
-    /** Pre-order asal transaksi ini (kalau ada) */
+    /** Pre-order yang diselesaikan lewat transaksi ini (transaksi pelunasan) */
     public function preOrder()
     {
         return $this->hasOne(PreOrder::class);
+    }
+
+    /** Pre-order asal pembayaran ini (untuk catatan DP maupun pelunasan) */
+    public function preOrderAsal()
+    {
+        return $this->belongsTo(PreOrder::class, 'pre_order_id');
     }
 
     public function scopeHariIni($query)
@@ -75,6 +85,11 @@ class Transaksi extends Model
             return false;
         }
 
+        // DP & pelunasan pre-order dikelola lewat halaman Pre-order (batalkan PO), bukan dari struk
+        if (($this->jenis ?? 'penjualan') !== 'penjualan') {
+            return false;
+        }
+
         return $user->role === 'kasir'
             && $this->user_id === $user->id
             && $this->created_at->isToday();
@@ -96,7 +111,7 @@ class Transaksi extends Model
             foreach ($trx->items()->get() as $item) {
                 $menu = Menu::lockForUpdate()->find($item->menu_id);
                 if ($menu) {
-                    $menu->increment('stok', $item->qty);
+                    StokService::kembali($menu, (int) $item->qty);
                     $menu->decrement('total_terjual', min((int) $menu->total_terjual, (int) $item->qty));
 
                     PergerakanStok::create([
@@ -115,10 +130,16 @@ class Transaksi extends Model
                     ['tabur', $item->bubuk_tabur, TransaksiController::TANPA_BUBUK],
                 ] as [$jenis, $nama, $tanpa]) {
                     if ($nama && $nama !== $tanpa) {
-                        Bumbu::where('jenis', $jenis)->where('nama', $nama)->increment('stok', $item->qty);
+                        $bumbu = Bumbu::where('jenis', $jenis)->where('nama', $nama)->lockForUpdate()->first();
+                        if ($bumbu) {
+                            StokService::kembali($bumbu, (int) $item->qty);
+                        }
                     }
                 }
             }
+
+            // Kembalikan stok operasional kasir (gas, minyak, dus, cup, es batu) yang tadi terpakai
+            StokOperasionalService::kembalikanTransaksi($trx, $oleh);
 
             $trx->update([
                 'status' => 'dibatalkan',

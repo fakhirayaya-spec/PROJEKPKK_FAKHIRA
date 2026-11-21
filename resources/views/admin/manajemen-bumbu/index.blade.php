@@ -105,6 +105,13 @@
                                     <div class="angka">
                                         <span>Sisa <b>{{ number_format($b->stok, 0, ',', '.') }}</b> {{ $b->satuan }}</span>
                                         <span>min. {{ $b->stok_minimum }}</span>
+                                        @php
+                                            $expB = isset($expTerdekat[$b->id]) ? \Carbon\Carbon::parse($expTerdekat[$b->id]) : null;
+                                            $hariB = $expB ? (int) round(($expB->copy()->startOfDay()->timestamp - today()->timestamp) / 86400) : null;
+                                        @endphp
+                                        @if($expB)
+                                            <span class="{{ $hariB <= 3 ? 'text-danger fw-bold' : '' }}">exp {{ $expB->format('d M') }}</span>
+                                        @endif
                                     </div>
                                 </div>
 
@@ -131,7 +138,7 @@
                                             </form>
                                             <hr class="my-1 opacity-25">
                                             <form method="POST" action="{{ route('admin.bumbu.destroy', $b) }}"
-                                                onsubmit="return confirm(@js('Hapus ' . $b->nama . '? Riwayat transaksi lama tetap aman.'))">
+                                                data-konfirmasi="Hapus {{ $b->nama }}? Riwayat transaksi lama tetap aman.">
                                                 @csrf @method('DELETE')
                                                 <button class="dropdown-item danger"><i class="bi bi-trash3"></i> Hapus</button>
                                             </form>
@@ -207,6 +214,9 @@
                     <label class="form-label small">Jumlah masuk (<span id="stokSatuan">porsi</span>)</label>
                     <input type="number" name="jumlah" id="stokJumlah" class="form-control form-control-lg" min="1" placeholder="Contoh: 50" required>
                     <div class="form-text">Stok sekarang: <b id="stokSekarang">0</b></div>
+                    <label class="form-label small mt-3">Tanggal exp</label>
+                    <input type="date" name="tanggal_exp" class="form-control" value="{{ \App\Services\StokService::expDefault('bumbu') }}" min="{{ now()->format('Y-m-d') }}">
+                    <div class="form-text">Otomatis 30 hari (1 bulan) dari hari ini, bisa diubah. Sisa stok yang lewat tanggal ini otomatis dibuang.</div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Batal</button>

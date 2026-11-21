@@ -104,6 +104,23 @@
         @yield('content')
     </div>
 
+    {{-- Alert konfirmasi untuk SEMUA tombol hapus (form dengan method DELETE) --}}
+    <div class="modal fade" id="modalKonfirmasiHapus" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-body text-center p-4">
+                    <i class="bi bi-exclamation-triangle text-danger" style="font-size: 2.2rem;"></i>
+                    <p class="mt-3 mb-1 fw-semibold">Yakin ingin menghapus?</p>
+                    <p class="text-muted small mb-0" id="konfirmasiPesan">Data yang dihapus tidak bisa dikembalikan.</p>
+                    <div class="d-flex justify-content-center gap-2 mt-3">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Batal</button>
+                        <button type="button" class="btn btn-danger btn-sm" id="konfirmasiYa">Ya, Hapus</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="{{ asset('assets_dashboard/libs/bootstrap/js/bootstrap.bundle.min.js') }}"></script>
     <script src="{{ asset('assets_dashboard/libs/apexcharts/apexcharts.min.js') }}"></script>
     <script>
@@ -122,6 +139,40 @@
                 body.classList.toggle('sidebar-collapsed');
                 try { localStorage.setItem('potato.sidebar', body.classList.contains('sidebar-collapsed') ? 'mini' : 'full'); } catch (e) {}
             });
+        })();
+    </script>
+    <script>
+        // Setiap form hapus (method DELETE) minta konfirmasi dulu. Form di dalam modal dilewati (sudah punya konfirmasi sendiri).
+        (function () {
+            const el = document.getElementById('modalKonfirmasiHapus');
+            if (!el || !window.bootstrap) return;
+            const modal = new bootstrap.Modal(el);
+            const pesan = document.getElementById('konfirmasiPesan');
+            const pesanAwal = pesan.textContent;
+            let formTertunda = null;
+
+            document.addEventListener('submit', function (e) {
+                const f = e.target;
+                if (!(f instanceof HTMLFormElement)) return;
+                const m = f.querySelector('input[name="_method"]');
+                if (!m || String(m.value).toUpperCase() !== 'DELETE') return;
+                if (f.closest('.modal')) return;
+
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                formTertunda = f;
+                pesan.textContent = f.dataset.konfirmasi || pesanAwal;
+                modal.show();
+            }, true);
+
+            document.getElementById('konfirmasiYa').addEventListener('click', function () {
+                if (!formTertunda) return;
+                const f = formTertunda;
+                formTertunda = null;
+                modal.hide();
+                f.submit();
+            });
+            el.addEventListener('hidden.bs.modal', function () { formTertunda = null; });
         })();
     </script>
     @stack('scripts')

@@ -21,7 +21,7 @@
                     <div class="ph {{ $gambarLama ? 'd-none' : '' }}" id="placeholderGambar">
                         <i class="bi bi-cloud-arrow-up"></i>
                         <b>Klik atau tarik foto ke sini</b>
-                        <small>JPG / PNG, maks 2 MB</small>
+                        <small>JPG / PNG, maks 5 MB</small>
                     </div>
                     <span class="ganti {{ $gambarLama ? '' : 'd-none' }}" id="labelGanti"><i class="bi bi-arrow-repeat me-1"></i>Klik untuk ganti foto</span>
                     <input type="file" name="gambar" id="inputGambar" accept="image/*">
@@ -125,7 +125,7 @@
                                 <option value="{{ $b->id }}" {{ old('bubuk_bawaan_id', $menu->bubuk_bawaan_id ?? '') == $b->id ? 'selected' : '' }}>{{ $b->nama }}</option>
                             @endforeach
                         </select>
-                        <div class="form-text">Kalau diisi, di kasir bubuk ini terkunci. Tambahan saus +Rp 3.000.</div>
+                        <div class="form-text">Kalau diisi, di kasir bubuk ini terkunci. Tambahan saus +Rp 2.000.</div>
                     </div>
 
                     <div class="col-12">

@@ -20,7 +20,7 @@
             <div>
                 <div class="crumb"><a href="{{ route($rp . 'index') }}">Pre-Order</a> <i class="bi bi-chevron-right"></i> <span>Buat</span></div>
                 <h4 class="mb-0">Buat pre-order</h4>
-                <p>Catat pesanan yang diambil nanti. Stok baru berkurang saat pesanan diambil dan dilunasi.</p>
+                <p>Catat pesanan yang diambil nanti. Minimal pesanan {{ \App\Models\PreOrder::MIN_PCS }} pcs produk dan DP wajib minimal {{ \App\Models\PreOrder::DP_MIN_PERSEN }}% dari total. Begitu pesanan dibuat, stok langsung berkurang dan DP langsung masuk pemasukan.</p>
             </div>
         </div>
 
@@ -53,10 +53,10 @@
                                     </div>
                                 </div>
                                 <div class="col-12">
-                                    <label class="form-label">No. WhatsApp <span class="text-muted fw-normal">(opsional)</span></label>
+                                    <label class="form-label">No. WhatsApp <span class="text-muted fw-normal">(opsional, kalau diisi harus 13 digit)</span></label>
                                     <div class="input-group">
                                         <span class="input-group-text"><i class="bi bi-whatsapp"></i></span>
-                                        <input type="text" name="no_whatsapp" value="{{ old('no_whatsapp') }}" inputmode="tel" class="form-control @error('no_whatsapp') is-invalid @enderror" placeholder="08123456789">
+                                        <input type="text" name="no_whatsapp" value="{{ old('no_whatsapp') }}" inputmode="numeric" pattern="[0-9]{13}" minlength="13" maxlength="13" class="form-control @error('no_whatsapp') is-invalid @enderror" placeholder="13 digit, contoh 0812345678901">
                                     </div>
                                 </div>
                                 <div class="col-7">
@@ -72,12 +72,20 @@
                                     <textarea name="catatan" rows="2" maxlength="500" class="form-control" placeholder="Contoh: dibungkus per 10 porsi, untuk acara arisan">{{ old('catatan') }}</textarea>
                                 </div>
                                 <div class="col-12">
-                                    <label class="form-label">DP / uang muka <span class="text-muted fw-normal">(opsional)</span></label>
+                                    <label class="form-label">DP / uang muka <span class="text-danger">*</span> <span class="text-muted fw-normal">(wajib minimal {{ \App\Models\PreOrder::DP_MIN_PERSEN }}% dari total)</span></label>
                                     <div class="input-group">
                                         <span class="input-group-text fw-bold">Rp</span>
-                                        <input type="number" min="0" name="dp" id="inputDp" value="{{ old('dp', 0) }}" class="form-control @error('dp') is-invalid @enderror">
+                                        <input type="number" min="1" name="dp" id="inputDp" value="{{ old('dp') }}" required class="form-control @error('dp') is-invalid @enderror">
                                     </div>
-                                    <div class="form-text">DP dipotong dari total saat pesanan diambil.</div>
+                                    <div class="form-text" id="infoDp">DP minimal {{ \App\Models\PreOrder::DP_MIN_PERSEN }}% dari total. DP langsung tercatat sebagai pemasukan; sisanya masuk saat pelunasan.</div>
+                                    <div class="form-text text-danger fw-semibold"><i class="bi bi-exclamation-triangle"></i> DP yang sudah masuk tidak dikembalikan jika pesanan dibatalkan.</div>
+                                    <div class="mt-2">
+                                        <label class="form-label small mb-1">DP dibayar lewat</label>
+                                        <select name="dp_metode" class="form-select form-select-sm">
+                                            <option value="cash" @selected(old('dp_metode', 'cash') === 'cash')>Cash</option>
+                                            <option value="qris" @selected(old('dp_metode') === 'qris')>QRIS</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -144,6 +152,8 @@
 
                             <div class="mt-3 pt-3 border-top">
                                 <div class="d-flex justify-content-between"><span class="text-muted">Total</span><b class="fs-5 text-potato-brown" id="totalPO">Rp 0</b></div>
+                                <div class="d-flex justify-content-between small mt-1"><span class="text-muted">Jumlah produk</span><span id="pcsTampil">0 pcs</span></div>
+                                <div class="d-flex justify-content-between small mt-1"><span class="text-muted">DP minimal ({{ \App\Models\PreOrder::DP_MIN_PERSEN }}%)</span><span id="dpMinTampil">Rp 0</span></div>
                                 <div class="d-flex justify-content-between small mt-1"><span class="text-muted">DP</span><span id="dpTampil">Rp 0</span></div>
                                 <div class="d-flex justify-content-between mt-1"><span class="fw-semibold">Sisa dibayar saat diambil</span><b id="sisaTampil">Rp 0</b></div>
                             </div>
@@ -183,6 +193,9 @@
     const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
     let items = [];
+    // DP otomatis terisi 50% dari total; kasir boleh menambah (tidak boleh kurang dari 50%)
+    let dpManual = {{ old('dp') !== null ? 'true' : 'false' }};
+    const MIN_PCS = {{ \App\Models\PreOrder::MIN_PCS }};
 
     function aturan(m) {
         return {
@@ -265,11 +278,22 @@
         byId('sisaTampil').textContent = rp(Math.max(0, sisa));
         byId('sisaTampil').style.color = dp > total && total > 0 ? '#b91c1c' : '';
         byId('sisaTampil').title = dp > total && total > 0 ? 'DP lebih besar dari total!' : '';
+
+        // Aturan pre-order: minimal {{ \App\Models\PreOrder::MIN_PCS }} pcs, DP minimal {{ \App\Models\PreOrder::DP_MIN_PERSEN }}% dari total
+        const pcs = items.reduce((a, it) => a + it.qty, 0);
+        const dpMin = Math.ceil(total * {{ \App\Models\PreOrder::DP_MIN_PERSEN }} / 100);
+        byId('pcsTampil').textContent = pcs + ' pcs' + (pcs < MIN_PCS ? ' (minimal ' + MIN_PCS + ')' : '');
+        byId('pcsTampil').style.color = pcs > 0 && pcs < MIN_PCS ? '#b91c1c' : '';
+        byId('dpMinTampil').textContent = rp(dpMin);
+        byId('inputDp').min = Math.max(1, dpMin);
+        if (!dpManual) { byId('inputDp').value = dpMin > 0 ? dpMin : ''; byId('dpTampil').textContent = rp(dpMin); byId('sisaTampil').textContent = rp(Math.max(0, total - dpMin)); }
+        const kurang = dp < dpMin && dpManual;
+        byId('infoDp').style.color = kurang ? '#b91c1c' : '';
     }
 
     byId('bMenu').addEventListener('change', perbaruiBuilder);
     ['bUkuran', 'bSaus', 'bBubuk'].forEach(id => byId(id).addEventListener('change', hitungPreview));
-    byId('inputDp').addEventListener('input', render);
+    byId('inputDp').addEventListener('input', () => { dpManual = true; render(); });
 
     byId('btnTambah').addEventListener('click', () => {
         const m = MENUS.find(x => String(x.id) === byId('bMenu').value);
@@ -282,6 +306,11 @@
 
     byId('formPO').addEventListener('submit', e => {
         if (!items.length) { e.preventDefault(); alert('Tambahkan minimal satu menu ke pesanan.'); return; }
+        const pcs = items.reduce((a, it) => a + it.qty, 0);
+        if (pcs < MIN_PCS) { e.preventDefault(); alert('Pre-order minimal ' + MIN_PCS + ' pcs produk. Pesanan ini baru ' + pcs + ' pcs.'); return; }
+        const total = items.reduce((a, it) => a + it.harga * it.qty, 0);
+        const dpMin = Math.ceil(total * {{ \App\Models\PreOrder::DP_MIN_PERSEN }} / 100);
+        if ((parseInt(byId('inputDp').value) || 0) < dpMin) { e.preventDefault(); alert('DP wajib minimal {{ \App\Models\PreOrder::DP_MIN_PERSEN }}% dari total, yaitu ' + rp(dpMin) + '.'); return; }
         document.querySelectorAll('.item-hidden').forEach(x => x.remove());
         items.forEach((it, i) => {
             ['menu_id', 'ukuran', 'saus', 'bubuk_tabur', 'qty'].forEach(f => {

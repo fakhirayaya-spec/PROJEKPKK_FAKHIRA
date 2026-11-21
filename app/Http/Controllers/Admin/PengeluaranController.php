@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Pengeluaran;
+use App\Support\KategoriPengeluaran;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -39,6 +40,16 @@ class PengeluaranController extends Controller
             $query->where('kategori', $request->kategori);
         }
 
+        // Ringkasan per kategori untuk rentang tanggal yang dipilih (tidak ikut filter kategori)
+        $rentang = Pengeluaran::query();
+        if ($dari) {
+            $rentang->where('tanggal', '>=', $dari->toDateString());
+        }
+        if ($sampai) {
+            $rentang->where('tanggal', '<=', $sampai->toDateString());
+        }
+        $perKategori = $rentang->selectRaw('kategori, SUM(jumlah) as total')->groupBy('kategori')->pluck('total', 'kategori');
+
         // Total dihitung dari query yang sama SEBELUM paginate, supaya tidak ikut ter-offset di halaman 2 dst.
         $totalPengeluaran = (int) (clone $query)->sum('jumlah');
 
@@ -47,6 +58,7 @@ class PengeluaranController extends Controller
         return view('admin.pengeluaran.index', [
             'pengeluarans' => $pengeluarans,
             'totalPengeluaran' => $totalPengeluaran,
+            'perKategori' => $perKategori,
             'dari' => $dari,
             'sampai' => $sampai,
             'labelKategori' => self::KATEGORI,
@@ -57,12 +69,14 @@ class PengeluaranController extends Controller
     {
         $data = $request->validate([
             'tanggal' => ['required', 'date'],
-            'kategori' => ['required', 'in:bahan_baku,operasional,lainnya'],
             'deskripsi' => ['required', 'string', 'max:150'],
             'jumlah' => ['required', 'integer', 'min:1'],
         ]);
 
-        $pengeluaran = Pengeluaran::create($data + ['user_id' => auth()->id()]);
+        // Kategori tidak dipilih manual: ditentukan otomatis dari keterangan (barang/bahan -> Bahan Baku, selain itu Operasional)
+        $kategori = KategoriPengeluaran::tentukan($data['deskripsi']);
+
+        $pengeluaran = Pengeluaran::create($data + ['kategori' => $kategori, 'user_id' => auth()->id()]);
 
         // Arahkan ke bulan dari tanggal yang diisi, supaya data barunya langsung kelihatan di daftar
         $tgl = Carbon::parse($data['tanggal']);
@@ -70,7 +84,7 @@ class PengeluaranController extends Controller
         return redirect()->route('admin.pengeluaran.index', [
             'dari' => $tgl->copy()->startOfMonth()->toDateString(),
             'sampai' => $tgl->copy()->endOfMonth()->toDateString(),
-        ])->with('sukses', 'Pengeluaran berhasil dicatat (' . $pengeluaran->tanggal->format('d M Y') . ').');
+        ])->with('sukses', 'Pengeluaran berhasil dicatat (' . $pengeluaran->tanggal->format('d M Y') . ') sebagai ' . self::KATEGORI[$kategori] . '.');
     }
 
     public function destroy(Pengeluaran $pengeluaran)

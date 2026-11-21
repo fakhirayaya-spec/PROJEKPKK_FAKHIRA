@@ -20,6 +20,7 @@
             'Operasional' => [
                 ['admin.stok.index', 'bi-boxes', 'Manajemen Stok', 'admin.stok.*'],
                 ['admin.bumbu.index', 'bi-droplet-half', 'Manajemen Bumbu', 'admin.bumbu.*'],
+                ['admin.stok-operasional.index', 'bi-fuel-pump', 'Stok Operasional', 'admin.stok-operasional.*'],
                 ['admin.preorder.index', 'bi-calendar-check', 'Pre-Order', 'admin.preorder.*'],
                 ['admin.riwayat.index', 'bi-receipt', 'Riwayat Transaksi', 'admin.riwayat.*'],
             ],

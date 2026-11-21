@@ -10,6 +10,7 @@ class RiwayatController extends Controller
     public function index()
     {
         $transaksis = Transaksi::milikKasir(auth()->id())
+            ->with('preOrderAsal')
             ->latest()
             ->paginate(10);
 

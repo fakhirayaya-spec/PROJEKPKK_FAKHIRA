@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\AturanPassword;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
@@ -37,12 +38,16 @@ class KasirController extends Controller
         $data = $request->validate([
             'name' => 'required|string|max:150',
             'email' => 'required|email|unique:users,email',
-            'password' => 'required|string|min:6|confirmed',
+            'password' => array_merge(['required'], AturanPassword::rules(), ['confirmed']),
             'status' => 'required|in:aktif,nonaktif',
             'alamat' => 'nullable|string|max:255',
             'jenis_kelamin' => 'nullable|in:L,P',
             'tanggal_lahir' => 'nullable|date|before:today',
-        ]);
+            'no_telepon' => 'required|digits:13',
+        ], [
+            'no_telepon.required' => 'Nomor telepon wajib diisi.',
+            'no_telepon.digits' => 'Nomor telepon harus tepat 13 digit angka (tanpa spasi atau tanda lain).',
+        ] + AturanPassword::pesan());
 
         // Foto TIDAK diisi admin. Kasir mengunggah fotonya sendiri lewat menu Profil kasir.
         User::create([
@@ -54,6 +59,7 @@ class KasirController extends Controller
             'alamat' => $data['alamat'] ?? null,
             'jenis_kelamin' => $data['jenis_kelamin'] ?? null,
             'tanggal_lahir' => $data['tanggal_lahir'] ?? null,
+            'no_telepon' => $data['no_telepon'],
         ]);
 
         return redirect()->route('admin.kasir.index')->with('sukses', 'Akun kasir baru berhasil ditambahkan.');
@@ -73,6 +79,10 @@ class KasirController extends Controller
             'alamat' => 'nullable|string|max:255',
             'jenis_kelamin' => 'nullable|in:L,P',
             'tanggal_lahir' => 'nullable|date|before:today',
+            'no_telepon' => 'required|digits:13',
+        ], [
+            'no_telepon.required' => 'Nomor telepon wajib diisi.',
+            'no_telepon.digits' => 'Nomor telepon harus tepat 13 digit angka (tanpa spasi atau tanda lain).',
         ]);
 
         // Foto tidak bisa diubah dari sini (hanya kasir yang bersangkutan, di menu Profil).

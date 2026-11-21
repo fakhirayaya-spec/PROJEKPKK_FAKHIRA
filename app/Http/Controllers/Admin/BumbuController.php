@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Bumbu;
+use App\Services\StokService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -19,6 +20,7 @@ class BumbuController extends Controller
             'total' => $semua->count(),
             'menipis' => $semua->filter(fn ($b) => $b->status_stok === 'menipis')->count(),
             'habis' => $semua->filter(fn ($b) => $b->status_stok === 'habis')->count(),
+            'expTerdekat' => StokService::expTerdekat('bumbu'),
         ]);
     }
 
@@ -37,7 +39,8 @@ class BumbuController extends Controller
             'nama.unique' => 'Nama itu sudah dipakai di kelompok yang sama.',
         ]);
 
-        Bumbu::create($data);
+        $bumbu = Bumbu::create($data);
+        StokService::sinkron($bumbu, 'Stok awal saat bumbu dibuat');
 
         return back()->with('sukses', '"' . $data['nama'] . '" berhasil ditambahkan.');
     }
@@ -57,15 +60,20 @@ class BumbuController extends Controller
         ]);
 
         $bumbu->update($data);
+        StokService::sinkron($bumbu); // kalau stok diubah langsung di form edit, batch exp ikut disesuaikan
 
         return back()->with('sukses', '"' . $bumbu->nama . '" berhasil diperbarui.');
     }
 
     public function tambahStok(Request $request, Bumbu $bumbu)
     {
-        $data = $request->validate(['jumlah' => ['required', 'integer', 'min:1']]);
+        $data = $request->validate([
+            'jumlah' => ['required', 'integer', 'min:1'],
+            'tanggal_exp' => ['nullable', 'date', 'after_or_equal:today'],
+        ]);
 
-        $bumbu->increment('stok', $data['jumlah']);
+        // Stok masuk dicatat sebagai batch dengan tanggal exp (default 14 hari / 2 minggu dari hari ini)
+        StokService::tambah($bumbu, (int) $data['jumlah'], $data['tanggal_exp'] ?? null, 'Restock manual');
 
         return back()->with('sukses', 'Stok "' . $bumbu->nama . '" bertambah ' . $data['jumlah'] . ' ' . $bumbu->satuan . '.');
     }

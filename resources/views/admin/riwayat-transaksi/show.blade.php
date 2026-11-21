@@ -77,7 +77,7 @@
                 <h6 class="fw-bold text-potato-brown mb-3">Ringkasan</h6>
                 <div class="d-flex justify-content-between small mb-2">
                     <span class="text-muted">Status</span>
-                    <span class="badge-soft {{ $transaksi->status == 'selesai' ? 'green' : 'red' }}">{{ ucfirst($transaksi->status) }}</span>
+                    @php $st = \App\Support\StatusTransaksi::untuk($transaksi); @endphp<span class="badge-soft {{ $st['warna'] }}">{{ $st['label'] }}</span>
                 </div>
                 <div class="d-flex justify-content-between small mb-2">
                     <span class="text-muted">Metode Bayar</span>

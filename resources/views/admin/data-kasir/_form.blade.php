@@ -75,7 +75,7 @@
                             <label class="form-label">Password <span class="req">*</span></label>
                             <div class="input-group">
                                 <span class="input-group-text"><i class="bi bi-key"></i></span>
-                                <input type="password" name="password" class="form-control @error('password') is-invalid @enderror" placeholder="Minimal 6 karakter">
+                                <input type="password" name="password" class="form-control @error('password') is-invalid @enderror" placeholder="Minimal 8 karakter + angka/simbol" minlength="8">
                                 @error('password') <div class="invalid-feedback">{{ $message }}</div> @enderror
                             </div>
                         </div>
@@ -119,6 +119,15 @@
                             <input type="date" name="tanggal_lahir" value="{{ $tgl }}" max="{{ now()->subDay()->format('Y-m-d') }}" class="form-control @error('tanggal_lahir') is-invalid @enderror">
                             @error('tanggal_lahir') <div class="invalid-feedback">{{ $message }}</div> @enderror
                         </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Nomor telepon <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-telephone"></i></span>
+                            <input type="text" name="no_telepon" value="{{ old('no_telepon', $edit ? $kasir->no_telepon : '') }}" required inputmode="numeric" pattern="[0-9]{13}" minlength="13" maxlength="13" class="form-control @error('no_telepon') is-invalid @enderror" placeholder="13 digit, contoh 0812345678901">
+                            @error('no_telepon') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                        <div class="form-text">Harus tepat 13 digit angka.</div>
                     </div>
                     <div class="col-12">
                         <label class="form-label">Alamat</label>

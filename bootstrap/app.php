@@ -14,6 +14,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRole::class,
         ]);
+
+        // Buang stok yang sudah lewat tanggal exp, otomatis sekali sehari (tanpa cron)
+        $middleware->web(append: [
+            \App\Http\Middleware\BuangStokKadaluarsa::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

@@ -43,6 +43,11 @@
             color: #fff;
             opacity: .9;
         }
+
+        .thumb-stok { flex-shrink: 0; }
+        .exp-cell { white-space: nowrap; line-height: 1.25; }
+        .exp-cell .exp-tgl { font-weight: 700; font-size: .84rem; color: #3d2314; }
+        .exp-none { font-size: .76rem; color: #9a8c7e; font-style: italic; }
     </style>
 @endpush
 
@@ -81,12 +86,14 @@
                             <th>KATEGORI</th>
                             <th class="text-end">STOK SAAT INI</th>
                             <th class="text-end">STOK MINIMUM</th>
+                            <th class="text-center">EXP TERDEKAT</th>
                             <th class="text-center">STATUS</th>
                             <th class="text-center">AKSI</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse($menus as $menu)
+                            @php $pakaiExp = \App\Services\StokService::pakaiExp($menu); @endphp
                             <tr>
                                 <td>
                                     <div class="d-flex align-items-center gap-2">
@@ -95,9 +102,21 @@
                                         <span class="fw-semibold text-potato-brown">{{ $menu->nama_menu }}</span>
                                     </div>
                                 </td>
-                                <td>{{ $menu->kategori->nama_kategori ?? '-' }}</td>
+                                <td class="text-nowrap">{{ $menu->kategori->nama_kategori ?? '-' }}</td>
                                 <td class="text-end fw-bold">{{ $menu->stok }}</td>
                                 <td class="text-end text-muted">{{ $menu->stok_minimum }}</td>
+                                <td class="text-center exp-cell">
+                                    @php
+                                        $expTgl = isset($expMenu[$menu->id]) ? \Carbon\Carbon::parse($expMenu[$menu->id]) : null;
+                                    @endphp
+                                    @if(! $pakaiExp)
+                                        <span class="exp-none">Tanpa exp</span>
+                                    @elseif($expTgl)
+                                        <span class="exp-tgl">{{ $expTgl->format('d/m/Y') }}</span>
+                                    @else
+                                        <span class="text-muted">-</span>
+                                    @endif
+                                </td>
                                 <td class="text-center">
                                     <span class="badge badge-{{ $menu->status_stok }} px-2 py-1">
                                         {{ ucfirst($menu->status_stok) }}
@@ -105,7 +124,7 @@
                                 </td>
                                 <td class="text-center">
                                     <div class="d-flex gap-1 justify-content-center">
-                                        <button type="button" class="btn btn-sm btn-potato" data-bs-toggle="modal"
+                                        <button type="button" class="btn btn-sm btn-potato text-nowrap" data-bs-toggle="modal"
                                             data-bs-target="#modalTambah{{ $menu->id }}">
                                             <i class="bi bi-plus-lg"></i> Tambah Stok
                                         </button>
@@ -139,6 +158,16 @@
                                                             <input type="text" name="keterangan" class="form-control"
                                                                 placeholder="Contoh: Restock dari supplier">
                                                         </div>
+                                                        @if($pakaiExp)
+                                                        <div class="mb-2 mt-3">
+                                                            <label class="form-label small fw-semibold">Tanggal Exp</label>
+                                                            <input type="date" name="tanggal_exp" class="form-control"
+                                                                value="{{ \App\Services\StokService::expDefault('menu') }}" min="{{ now()->format('Y-m-d') }}">
+                                                            <div class="form-text">Otomatis 14 hari (2 minggu) dari hari ini, bisa diubah. Sisa stok yang lewat tanggal ini otomatis dibuang.</div>
+                                                        </div>
+                                                        @else
+                                                        <div class="form-text mb-2">Minuman dibuat dadakan, jadi tidak pakai tanggal exp.</div>
+                                                        @endif
                                                         <p class="text-muted small mb-0">Stok saat ini:
                                                             <strong>{{ $menu->stok }}</strong></p>
                                                     </div>
@@ -155,7 +184,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="6" class="text-center text-muted py-4">Belum ada menu. Tambahkan menu dulu
+                                <td colspan="7" class="text-center text-muted py-4">Belum ada menu. Tambahkan menu dulu
                                     di Master Menu.</td>
                             </tr>
                         @endforelse

@@ -89,6 +89,9 @@
                                 @endif
                                 <div>
                                     <div class="fw-semibold text-potato-brown">{{ $kasir->name }}</div>
+                                    @if($kasir->no_telepon)
+                                        <div class="text-muted" style="font-size: 11px;"><i class="bi bi-telephone"></i> {{ $kasir->no_telepon }}</div>
+                                    @endif
                                     @if($kasir->alamat)
                                         <div class="text-muted" style="font-size: 11px;" title="{{ $kasir->alamat }}">
                                             <i class="bi bi-geo-alt"></i> {{ \Illuminate\Support\Str::limit($kasir->alamat, 30) }}

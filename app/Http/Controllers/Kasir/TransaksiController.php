@@ -8,6 +8,8 @@ use App\Models\Menu;
 use App\Models\PergerakanStok;
 use App\Models\Transaksi;
 use App\Models\TransaksiItem;
+use App\Services\StokOperasionalService;
+use App\Services\StokService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -17,11 +19,11 @@ class TransaksiController extends Controller
     // Tambahan harga per pilihan ukuran (dihitung di server biar tidak bisa dimanipulasi dari luar)
     public const UKURAN_EXTRA = [
         'Reguler' => 0,
-        'Jumbo' => 5000,
+        'Jumbo' => 3000,
     ];
 
     // Biaya kalau pembeli menambah saus di menu yang bumbu tabur-nya sudah bawaan
-    public const HARGA_SAUS_TAMBAHAN = 3000;
+    public const HARGA_SAUS_TAMBAHAN = 2000;
 
     public const TANPA_SAUS = 'Tanpa Saus Tambahan';
     public const TANPA_BUBUK = 'Tanpa Bubuk Tabur';
@@ -52,7 +54,7 @@ class TransaksiController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'metode_bayar' => ['required', 'in:cash,qris,paylater'],
+            'metode_bayar' => ['required', 'in:cash,qris'],
             'uang_diterima' => ['nullable', 'integer', 'min:0'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.menu_id' => ['required', 'exists:menus,id'],
@@ -78,7 +80,7 @@ class TransaksiController extends Controller
 
                 // Aturan bumbu per menu (server yang menentukan, bukan kiriman dari browser):
                 //  - menu bersaus  : saus terkunci, bubuk tabur boleh dipilih (gratis)
-                //  - menu berbubuk : bubuk terkunci, saus tambahan boleh dipilih (+Rp 3.000)
+                //  - menu berbubuk : bubuk terkunci, saus tambahan boleh dipilih (+Rp 2.000)
                 //  - menu tanpa bumbu bawaan (mis. minuman): tidak ada pilihan
                 $sausTerkunci = (bool) $menu->saus_bawaan_id;
                 $bubukTerkunci = (bool) $menu->bubuk_bawaan_id;
@@ -128,6 +130,9 @@ class TransaksiController extends Controller
                 ];
             }
 
+            // Stok operasional kasir (gas, minyak, dus, cup, es batu) harus cukup, kalau tidak transaksi ditolak
+            StokOperasionalService::pastikanCukup((int) auth()->id(), $itemsSiap);
+
             // Pembayaran cash: uang diterima wajib & harus cukup. Total dihitung server, bukan dari browser.
             $uangDiterima = null;
             $kembalian = null;
@@ -165,7 +170,7 @@ class TransaksiController extends Controller
                 ]);
 
                 // Kurangi stok & catat pergerakan stok keluar
-                $item['menu']->decrement('stok', $item['qty']);
+                StokService::keluar($item['menu'], $item['qty']);
                 $item['menu']->increment('total_terjual', $item['qty']);
 
                 PergerakanStok::create([
@@ -180,10 +185,13 @@ class TransaksiController extends Controller
                 // Kurangi stok saus & bumbu tabur yang dipilih (1 porsi per qty)
                 foreach (['saus_model', 'bubuk_model'] as $kunci) {
                     if ($item[$kunci]) {
-                        $item[$kunci]->decrement('stok', $item['qty']);
+                        StokService::keluar($item[$kunci], $item['qty']);
                     }
                 }
             }
+
+            // Kurangi stok operasional kasir & catat riwayatnya
+            StokOperasionalService::pakaiUntukTransaksi($transaksi, $itemsSiap);
 
             return $transaksi;
         });

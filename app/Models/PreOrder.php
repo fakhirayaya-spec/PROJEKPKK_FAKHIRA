@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Http\Controllers\Kasir\TransaksiController;
+use App\Services\StokService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -19,13 +20,20 @@ class PreOrder extends Model
         'dibatalkan' => 'Dibatalkan',
     ];
 
+    /** Minimal jumlah produk (pcs, semua menu dijumlah) dalam satu pre-order */
+    public const MIN_PCS = 10;
+
+    /** DP wajib minimal sekian persen dari total pembelian */
+    public const DP_MIN_PERSEN = 50;
+
     protected $fillable = [
         'kode_preorder', 'user_id', 'nama_pelanggan', 'no_whatsapp', 'tanggal_ambil', 'jam_ambil',
-        'catatan', 'status', 'total', 'dp', 'transaksi_id', 'alasan_batal',
+        'catatan', 'status', 'stok_dipotong', 'total', 'dp', 'transaksi_id', 'alasan_batal',
     ];
 
     protected $casts = [
         'tanggal_ambil' => 'date',
+        'stok_dipotong' => 'boolean',
     ];
 
     public function pembuat()
@@ -38,9 +46,16 @@ class PreOrder extends Model
         return $this->hasMany(PreOrderItem::class);
     }
 
+    /** Transaksi pelunasan (terisi saat pre-order diselesaikan) */
     public function transaksi()
     {
         return $this->belongsTo(Transaksi::class);
+    }
+
+    /** Semua catatan pembayaran PO ini: DP (bisa lebih dari satu) dan pelunasan */
+    public function pembayaran()
+    {
+        return $this->hasMany(Transaksi::class, 'pre_order_id');
     }
 
     public function scopeAktif($query)
@@ -56,6 +71,12 @@ class PreOrder extends Model
     public function getLabelStatusAttribute(): string
     {
         return self::LABEL_STATUS[$this->status] ?? ucfirst($this->status);
+    }
+
+    /** DP minimal (50% dari total, dibulatkan ke atas ke rupiah) */
+    public static function dpMinimal(int $total): int
+    {
+        return (int) ceil($total * self::DP_MIN_PERSEN / 100);
     }
 
     /** Sisa yang harus dibayar pelanggan saat mengambil pesanan */
@@ -97,9 +118,198 @@ class PreOrder extends Model
     }
 
     /**
-     * Selesaikan pre-order: pesanan diserahkan & dilunasi, lalu otomatis dicatat sebagai transaksi
-     * (masuk riwayat & laporan), stok menu + saus + bubuk berkurang, dan pergerakan stok dicatat.
-     * Stok baru dipotong di sini (bukan saat pesanan dicatat) karena pesanan dibuat untuk hari lain.
+     * Catat DP (uang muka) sebagai pemasukan: dibuat sebagai transaksi berjenis "dp" sebesar DP saja,
+     * sehingga Dashboard & Laporan langsung bertambah sebesar DP di tanggal DP diterima.
+     */
+    public function catatDp(User $oleh, int $jumlah, string $metode): ?Transaksi
+    {
+        if ($jumlah <= 0) {
+            return null;
+        }
+
+        $urut = Transaksi::where('pre_order_id', $this->id)->where('jenis', 'dp')->count() + 1;
+
+        return Transaksi::create([
+            'kode_transaksi' => 'DP-' . $this->kode_preorder . '-' . $urut,
+            'jenis' => 'dp',
+            'pre_order_id' => $this->id,
+            'user_id' => $oleh->id,
+            'metode_bayar' => $metode,
+            'total' => $jumlah,
+            'uang_diterima' => $metode === 'cash' ? $jumlah : null,
+            'kembalian' => $metode === 'cash' ? 0 : null,
+            'status' => 'selesai',
+        ]);
+    }
+
+    /** Tandai sedang diproses. Stok sudah berkurang sejak pesanan dibuat; PO lama yang belum terpotong dipotong di sini. */
+    public function proses(User $oleh): void
+    {
+        DB::transaction(function () use ($oleh) {
+            $po = static::lockForUpdate()->findOrFail($this->id);
+
+            if ($po->status !== 'baru') {
+                throw ValidationException::withMessages(['status' => 'Pre-order ini sudah tidak berstatus Baru.']);
+            }
+
+            $po->potongStokJikaBelum($oleh);
+            $po->update(['status' => 'diproses']);
+        });
+
+        $this->refresh();
+    }
+
+    /** Tandai siap diambil. */
+    public function tandaiSiap(User $oleh): void
+    {
+        DB::transaction(function () use ($oleh) {
+            $po = static::lockForUpdate()->findOrFail($this->id);
+
+            if (! in_array($po->status, ['baru', 'diproses'], true)) {
+                throw ValidationException::withMessages(['status' => 'Status pre-order tidak bisa diubah ke "Siap Diambil".']);
+            }
+
+            $po->potongStokJikaBelum($oleh);
+            $po->update(['status' => 'siap']);
+        });
+
+        $this->refresh();
+    }
+
+    /**
+     * Potong stok semua item (menu + saus + bubuk). Dicek dulu semuanya sebelum ada yang dipotong.
+     * Aman dipanggil berulang: kalau stok sudah pernah dipotong, tidak melakukan apa-apa.
+     * Harus dipanggil di dalam DB::transaction oleh pemanggilnya.
+     */
+    public function potongStokJikaBelum(User $oleh): void
+    {
+        if ($this->stok_dipotong) {
+            return;
+        }
+
+        $items = $this->items()->get();
+        if ($items->isEmpty()) {
+            throw ValidationException::withMessages(['status' => 'Pre-order tidak punya item.']);
+        }
+
+        $pakaiMenu = [];
+        $pakaiBumbu = [];
+        $menus = [];
+        $bumbus = [];
+
+        foreach ($items as $item) {
+            $menu = $item->menu_id ? Menu::lockForUpdate()->find($item->menu_id) : null;
+            if (! $menu) {
+                throw ValidationException::withMessages(['status' => "Menu \"{$item->nama_menu}\" sudah dihapus dari Master Menu, pre-order tidak bisa diproses."]);
+            }
+            $menus[$item->id] = $menu;
+            $pakaiMenu[$menu->id] = ($pakaiMenu[$menu->id] ?? 0) + $item->qty;
+            if ($menu->stok < $pakaiMenu[$menu->id]) {
+                throw ValidationException::withMessages(['status' => "Stok {$menu->nama_menu} kurang (tersedia {$menu->stok}, dibutuhkan {$pakaiMenu[$menu->id]}). Tambah stok dulu di Manajemen Stok."]);
+            }
+
+            foreach ([
+                'saus' => ['saus', $item->saus, TransaksiController::TANPA_SAUS],
+                'bubuk' => ['tabur', $item->bubuk_tabur, TransaksiController::TANPA_BUBUK],
+            ] as $kunci => [$jenis, $nama, $tanpa]) {
+                if (! $nama || $nama === $tanpa) {
+                    continue;
+                }
+                $bumbu = Bumbu::lockForUpdate()->where('jenis', $jenis)->where('nama', $nama)->first();
+                if (! $bumbu) {
+                    throw ValidationException::withMessages(['status' => "\"{$nama}\" sudah tidak ada di Manajemen Bumbu."]);
+                }
+                $bumbus[$item->id][$kunci] = $bumbu;
+                $pakaiBumbu[$bumbu->id] = ($pakaiBumbu[$bumbu->id] ?? 0) + $item->qty;
+                if ($bumbu->stok < $pakaiBumbu[$bumbu->id]) {
+                    throw ValidationException::withMessages(['status' => "Stok {$bumbu->nama} kurang (tersedia {$bumbu->stok}, dibutuhkan {$pakaiBumbu[$bumbu->id]}). Tambah stok dulu di Manajemen Bumbu."]);
+                }
+            }
+        }
+
+        foreach ($items as $item) {
+            $menu = $menus[$item->id];
+            StokService::keluar($menu, (int) $item->qty);
+
+            PergerakanStok::create([
+                'menu_id' => $menu->id,
+                'user_id' => $oleh->id,
+                'jenis' => 'keluar',
+                'jumlah' => $item->qty,
+                'keterangan' => 'Pre-order ' . $this->kode_preorder . ' diproses',
+                'tanggal' => today(),
+            ]);
+
+            foreach ($bumbus[$item->id] ?? [] as $bumbu) {
+                StokService::keluar($bumbu, (int) $item->qty);
+            }
+        }
+
+        $this->update(['stok_dipotong' => true]);
+    }
+
+    /** Kembalikan stok yang sudah dipotong (dipakai saat pre-order dibatalkan). */
+    private function kembalikanStok(User $oleh): void
+    {
+        foreach ($this->items()->get() as $item) {
+            $menu = $item->menu_id ? Menu::lockForUpdate()->find($item->menu_id) : null;
+            if ($menu) {
+                StokService::kembali($menu, (int) $item->qty);
+
+                PergerakanStok::create([
+                    'menu_id' => $menu->id,
+                    'user_id' => $oleh->id,
+                    'jenis' => 'masuk',
+                    'jumlah' => $item->qty,
+                    'keterangan' => 'Batal pre-order ' . $this->kode_preorder,
+                    'tanggal' => today(),
+                ]);
+            }
+
+            foreach ([
+                ['saus', $item->saus, TransaksiController::TANPA_SAUS],
+                ['tabur', $item->bubuk_tabur, TransaksiController::TANPA_BUBUK],
+            ] as [$jenis, $nama, $tanpa]) {
+                if ($nama && $nama !== $tanpa) {
+                    $bumbu = Bumbu::lockForUpdate()->where('jenis', $jenis)->where('nama', $nama)->first();
+                    if ($bumbu) {
+                        StokService::kembali($bumbu, (int) $item->qty);
+                    }
+                }
+            }
+        }
+
+        $this->update(['stok_dipotong' => false]);
+    }
+
+    /**
+     * Batalkan pre-order. DP TIDAK dikembalikan ke pelanggan, jadi tetap tercatat sebagai pemasukan.
+     * Stok dikembalikan hanya kalau pesanan masih "Baru" (bahan belum dipakai). Kalau sudah
+     * diproses / siap, bahan dianggap sudah terpakai sehingga stok tidak dikembalikan.
+     */
+    public function batalkan(User $oleh, string $alasan): void
+    {
+        DB::transaction(function () use ($oleh, $alasan) {
+            $po = static::lockForUpdate()->findOrFail($this->id);
+
+            if (! $po->aktif) {
+                throw ValidationException::withMessages(['status' => 'Pre-order ini sudah ' . strtolower($po->label_status) . '.']);
+            }
+
+            if ($po->stok_dipotong && $po->status === 'baru') {
+                $po->kembalikanStok($oleh);
+            }
+
+            $po->update(['status' => 'dibatalkan', 'alasan_batal' => $alasan]);
+        });
+
+        $this->refresh();
+    }
+
+    /**
+     * Pelunasan: pesanan diambil & sisa dibayar. Dicatat sebagai transaksi berjenis "pelunasan" sebesar
+     * SISA saja (DP sudah masuk lebih dulu), lengkap dengan item-itemnya untuk laporan menu & laba.
+     * Stok sudah berkurang saat "Proses"; kalau PO lama belum pernah dipotong, dipotong di sini.
      */
     public function selesaikan(User $oleh, string $metode, ?int $uangSisa): Transaksi
     {
@@ -115,7 +325,6 @@ class PreOrder extends Model
                 throw ValidationException::withMessages(['status' => 'Pre-order tidak punya item.']);
             }
 
-            // --- Pembayaran pelunasan ---
             $sisa = $po->sisa;
             $uangDiterima = null;
             $kembalian = null;
@@ -126,51 +335,29 @@ class PreOrder extends Model
                         'uang_diterima' => 'Uang diterima kurang Rp ' . number_format($sisa - $uangSisa, 0, ',', '.') . ' dari sisa pembayaran Rp ' . number_format($sisa, 0, ',', '.') . '.',
                     ]);
                 }
-                $uangDiterima = (int) $po->dp + $uangSisa;   // total uang masuk: DP + pelunasan
+                $uangDiterima = $uangSisa;
                 $kembalian = $uangSisa - $sisa;
             }
 
-            // --- Cek stok dulu (semua item) sebelum ada yang dipotong ---
-            $pakaiMenu = [];
-            $pakaiBumbu = [];
             $menus = [];
-            $bumbus = [];
             foreach ($items as $item) {
                 $menu = $item->menu_id ? Menu::lockForUpdate()->find($item->menu_id) : null;
                 if (! $menu) {
                     throw ValidationException::withMessages(['status' => "Menu \"{$item->nama_menu}\" sudah dihapus dari Master Menu, pre-order tidak bisa diselesaikan."]);
                 }
                 $menus[$item->id] = $menu;
-                $pakaiMenu[$menu->id] = ($pakaiMenu[$menu->id] ?? 0) + $item->qty;
-                if ($menu->stok < $pakaiMenu[$menu->id]) {
-                    throw ValidationException::withMessages(['status' => "Stok {$menu->nama_menu} kurang (tersedia {$menu->stok}, dibutuhkan {$pakaiMenu[$menu->id]}). Tambah stok dulu di Manajemen Stok."]);
-                }
-
-                foreach ([
-                    'saus' => ['saus', $item->saus, TransaksiController::TANPA_SAUS],
-                    'bubuk' => ['tabur', $item->bubuk_tabur, TransaksiController::TANPA_BUBUK],
-                ] as $kunci => [$jenis, $nama, $tanpa]) {
-                    if (! $nama || $nama === $tanpa) {
-                        continue;
-                    }
-                    $bumbu = Bumbu::lockForUpdate()->where('jenis', $jenis)->where('nama', $nama)->first();
-                    if (! $bumbu) {
-                        throw ValidationException::withMessages(['status' => "\"{$nama}\" sudah tidak ada di Manajemen Bumbu."]);
-                    }
-                    $bumbus[$item->id][$kunci] = $bumbu;
-                    $pakaiBumbu[$bumbu->id] = ($pakaiBumbu[$bumbu->id] ?? 0) + $item->qty;
-                    if ($bumbu->stok < $pakaiBumbu[$bumbu->id]) {
-                        throw ValidationException::withMessages(['status' => "Stok {$bumbu->nama} kurang (tersedia {$bumbu->stok}, dibutuhkan {$pakaiBumbu[$bumbu->id]}). Tambah stok dulu di Manajemen Bumbu."]);
-                    }
-                }
             }
 
-            // --- Catat transaksi ---
+            // Pre-order lama yang belum pernah diproses lewat alur baru: potong stok sekarang
+            $po->potongStokJikaBelum($oleh);
+
             $transaksi = Transaksi::create([
                 'kode_transaksi' => 'TRX-' . now()->format('ymd') . '-' . str_pad((Transaksi::whereDate('created_at', today())->count() + 1), 3, '0', STR_PAD_LEFT),
+                'jenis' => 'pelunasan',
+                'pre_order_id' => $po->id,
                 'user_id' => $oleh->id,
                 'metode_bayar' => $metode,
-                'total' => $po->total,
+                'total' => $sisa,
                 'uang_diterima' => $uangDiterima,
                 'kembalian' => $kembalian,
                 'status' => 'selesai',
@@ -189,22 +376,7 @@ class PreOrder extends Model
                     'subtotal' => $item->subtotal,
                 ]);
 
-                $menu = $menus[$item->id];
-                $menu->decrement('stok', $item->qty);
-                $menu->increment('total_terjual', $item->qty);
-
-                PergerakanStok::create([
-                    'menu_id' => $menu->id,
-                    'user_id' => $oleh->id,
-                    'jenis' => 'keluar',
-                    'jumlah' => $item->qty,
-                    'keterangan' => 'Pre-order ' . $po->kode_preorder . ' (' . $transaksi->kode_transaksi . ')',
-                    'tanggal' => today(),
-                ]);
-
-                foreach ($bumbus[$item->id] ?? [] as $bumbu) {
-                    $bumbu->decrement('stok', $item->qty);
-                }
+                $menus[$item->id]->increment('total_terjual', $item->qty);
             }
 
             $po->update(['status' => 'selesai', 'transaksi_id' => $transaksi->id]);

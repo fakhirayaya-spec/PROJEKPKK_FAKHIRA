@@ -37,7 +37,7 @@
     .total-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 14px; }
     .total-row b { font-family: 'Bricolage Grotesque', sans-serif; font-size: 1.7rem; font-weight: 800; }
 
-    .pay-opts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+    .pay-opts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px; }
     .pay-opts input, .opt-group input { position: absolute; opacity: 0; pointer-events: none; }
     .pay-opts label { border: 1.5px solid var(--line); background: #fff; border-radius: 12px; padding: 10px 6px; text-align: center; font-weight: 700; font-size: .8rem; cursor: pointer; margin: 0; }
     .pay-opts label i { display: block; font-size: 1.15rem; margin-bottom: 2px; color: var(--ink-3); }
@@ -136,7 +136,6 @@
                 <div class="pay-opts">
                     <div><input type="radio" name="metode" id="mCash" value="cash" checked><label for="mCash"><i class="bi bi-cash-coin"></i>Cash</label></div>
                     <div><input type="radio" name="metode" id="mQris" value="qris"><label for="mQris"><i class="bi bi-qr-code"></i>QRIS</label></div>
-                    <div><input type="radio" name="metode" id="mPay" value="paylater"><label for="mPay"><i class="bi bi-hourglass-split"></i>PayLater</label></div>
                 </div>
 
                 {{-- Uang diterima (hanya untuk Cash) --}}
@@ -301,7 +300,7 @@
 
     // Aturan bumbu per menu:
     //  - menu bersaus  -> saus terkunci, bubuk tabur opsional & gratis
-    //  - menu berbubuk -> bubuk terkunci, saus tambahan opsional +Rp 3.000
+    //  - menu berbubuk -> bubuk terkunci, saus tambahan opsional +Rp 2.000
     //  - lainnya (minuman) -> tidak ada pilihan bumbu
     function aturanMenu(menu) {
         const sausKunci = !!menu.sausBawaan, bubukKunci = !!menu.bubukBawaan;

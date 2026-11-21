@@ -42,14 +42,15 @@ class RiwayatTransaksiController extends Controller
             'status' => ['nullable', 'in:selesai,dibatalkan'],
         ]);
 
-        $transaksis = $this->terapkanFilter(Transaksi::with('kasir')->withCount('items'), $request)
+        $transaksis = $this->terapkanFilter(Transaksi::with('kasir', 'preOrderAsal')->withCount('items'), $request)
             ->latest()
             ->paginate(15)
             ->withQueryString();
 
         $selesai = $this->terapkanFilter(Transaksi::query(), $request)->where('status', 'selesai');
         $totalNominal = (clone $selesai)->sum('total');
-        $totalTransaksi = (clone $selesai)->count();
+        // Pre-order dihitung 1x, yaitu saat sudah lunas (baris DP tidak dihitung sebagai transaksi selesai)
+        $totalTransaksi = (clone $selesai)->where('jenis', '!=', 'dp')->count();
 
         $kasirs = User::kasir()->orderBy('name')->get();
 
@@ -58,7 +59,7 @@ class RiwayatTransaksiController extends Controller
 
     public function show(Transaksi $transaksi)
     {
-        $transaksi->load('items.menu', 'kasir', 'pembatal');
+        $transaksi->load('items.menu', 'kasir', 'pembatal', 'preOrderAsal');
 
         return view('admin.riwayat-transaksi.show', compact('transaksi'));
     }
