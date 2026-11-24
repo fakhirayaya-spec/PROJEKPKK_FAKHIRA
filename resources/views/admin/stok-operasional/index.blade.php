@@ -64,6 +64,13 @@
                     </div>
                     @if ($kasir->status !== 'aktif')
                         <span class="badge bg-secondary-subtle text-secondary">Nonaktif</span>
+                    @else
+                        <form action="{{ route('admin.stok-operasional.isi-semua', $kasir) }}" method="POST" class="m-0"
+                            data-judul="Isi semua stok?" data-ya="Ya, isi semua" data-tipe="tanya"
+                            data-konfirmasi="Mau menambah semua stok operasional ke kasir {{ $kasir->name }} sekali jalan?&#10;&#10;Biayanya otomatis tercatat di Pengeluaran.">
+                            @csrf
+                            <button type="submit" class="btn btn-sm so-btn text-nowrap"><i class="bi bi-box-seam"></i> Isi Semua Stok</button>
+                        </form>
                     @endif
                 </div>
 
@@ -92,7 +99,9 @@
                             <div class="so-bar"><span class="{{ $b->status_stok }}" style="width: {{ $b->persen }}%"></span></div>
 
                             <form action="{{ route('admin.stok-operasional.isi-ulang', $kasir) }}" method="POST" class="so-refill"
-                                style="flex-wrap: wrap;" data-harga="{{ (int) $m->harga_per_unit }}">
+                                style="flex-wrap: wrap;" data-harga="{{ (int) $m->harga_per_unit }}"
+                                data-kasir="{{ $kasir->name }}" data-bahan="{{ $m->nama }}" data-unit="{{ $m->unit_isi }}"
+                                data-judul="Tambah stok ke kasir?" data-ya="Ya, tambah stok" data-tipe="tanya">
                                 @csrf
                                 <input type="hidden" name="bahan" value="{{ $kode }}">
                                 <input type="number" name="jumlah" min="1" max="1000" value="{{ $m->default_isi }}"
@@ -123,6 +132,19 @@
 <script>
     // Biaya otomatis = jumlah x harga beli per satuan (kalau harga sudah diisi di Kelola Bahan). Tetap bisa diubah manual.
     document.querySelectorAll('.so-refill').forEach(function (f) {
+        // Isi pesan konfirmasi (dialog Potato) sesuai angka yang sedang diisi
+        const jml = f.querySelector('.so-jumlah'), bya = f.querySelector('.so-biaya');
+        const susunPesan = function () {
+            const n = parseInt(jml.value) || 0;
+            const biaya = parseInt(bya.value) || 0;
+            f.dataset.konfirmasi = 'Mau menambah stok ' + f.dataset.bahan + ' sebanyak ' + n + ' ' + f.dataset.unit +
+                ' ke kasir ' + f.dataset.kasir + '?\n\nBiaya Rp ' + biaya.toLocaleString('id-ID') +
+                ' akan otomatis tercatat di Pengeluaran.';
+        };
+        susunPesan();
+        jml.addEventListener('input', susunPesan);
+        bya.addEventListener('input', susunPesan);
+
         const harga = parseInt(f.dataset.harga) || 0;
         if (!harga) return;
         const jumlah = f.querySelector('.so-jumlah');
@@ -130,6 +152,7 @@
         jumlah.addEventListener('input', function () {
             const n = parseInt(jumlah.value) || 0;
             biaya.value = n > 0 ? n * harga : '';
+            susunPesan();
         });
     });
 </script>

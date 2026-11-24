@@ -16,7 +16,7 @@ class HapusKasir
     {
         $d = (string) $deskripsi;
 
-        if (! preg_match('/^(Stok awal|Isi ulang) /u', $d)) {
+        if (! preg_match('/^(Stok awal|Isi ulang|Isi stok) /u', $d)) {
             return false;
         }
 

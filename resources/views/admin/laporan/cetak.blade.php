@@ -53,6 +53,7 @@
 @endphp
     <div class="bar">
         <button onclick="window.print()">Cetak / Simpan PDF</button>
+        <a href="{{ route('admin.laporan.index', request()->query()) }}" style="color:#5a2d0c;font-weight:bold;font-size:13px;text-decoration:none;">&larr; Kembali ke Laporan</a>
         <span>Di jendela cetak, pilih <b>Simpan sebagai PDF</b> pada bagian Tujuan (Destination).</span>
     </div>
 
@@ -317,5 +318,11 @@
             <div class="garis">( ................................. )</div>
         </div>
     </div>
+<script>
+    // Setelah cetak / simpan PDF selesai (atau dibatalkan), langsung kembali ke halaman Laporan
+    window.addEventListener('afterprint', function () {
+        window.location.href = @json(route('admin.laporan.index', request()->query()));
+    });
+</script>
 </body>
 </html>

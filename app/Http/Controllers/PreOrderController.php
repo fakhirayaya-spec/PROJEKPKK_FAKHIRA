@@ -118,7 +118,7 @@ class PreOrderController extends Controller
     {
         $data = $request->validate([
             'nama_pelanggan' => ['required', 'string', 'max:100'],
-            'no_whatsapp' => ['nullable', 'digits:13'],
+            'no_whatsapp' => ['nullable', 'digits:12'],
             'tanggal_ambil' => ['required', 'date', 'after_or_equal:today'],
             'jam_ambil' => ['nullable', 'date_format:H:i'],
             'catatan' => ['nullable', 'string', 'max:500'],
@@ -133,7 +133,7 @@ class PreOrderController extends Controller
         ], [
             'items.required' => 'Tambahkan minimal satu menu ke pesanan.',
             'items.min' => 'Tambahkan minimal satu menu ke pesanan.',
-            'no_whatsapp.digits' => 'Nomor WhatsApp harus tepat 13 digit angka (tanpa spasi atau tanda lain).',
+            'no_whatsapp.digits' => 'Nomor WhatsApp harus tepat 12 digit angka (tanpa spasi atau tanda lain).',
             'tanggal_ambil.after_or_equal' => 'Tanggal ambil tidak boleh sebelum hari ini.',
             'dp.required' => 'DP / uang muka wajib diisi (minimal ' . PreOrder::DP_MIN_PERSEN . '% dari total pesanan).',
             'dp.min' => 'DP / uang muka wajib diisi (minimal ' . PreOrder::DP_MIN_PERSEN . '% dari total pesanan).',
@@ -282,14 +282,14 @@ class PreOrderController extends Controller
 
         $data = $request->validate([
             'nama_pelanggan' => ['required', 'string', 'max:100'],
-            'no_whatsapp' => array_merge(['nullable', 'string', 'max:20'], $request->input('no_whatsapp') === $preorder->no_whatsapp ? [] : ['digits:13']),
+            'no_whatsapp' => array_merge(['nullable', 'string', 'max:20'], $request->input('no_whatsapp') === $preorder->no_whatsapp ? [] : ['digits:12']),
             'tanggal_ambil' => ['required', 'date'],
             'jam_ambil' => ['nullable', 'date_format:H:i'],
             'catatan' => ['nullable', 'string', 'max:500'],
             'dp' => ['nullable', 'integer', 'min:0'],
             'dp_metode' => ['nullable', 'in:cash,qris'],
         ], [
-            'no_whatsapp.digits' => 'Nomor WhatsApp harus tepat 13 digit angka (tanpa spasi atau tanda lain).',
+            'no_whatsapp.digits' => 'Nomor WhatsApp harus tepat 12 digit angka (tanpa spasi atau tanda lain).',
         ]);
 
         $metodeDp = ($data['dp_metode'] ?? 'cash') === 'qris' ? 'qris' : 'cash';

@@ -31,11 +31,18 @@
         <div class="page-head">
             <div>
                 <h4 class="mb-0">Manajemen Bumbu</h4>
-                <p>Atur stok bumbu tabur dan saus. Pilihan di halaman kasir mengikuti daftar ini.</p>
+                <p>Atur daftar bumbu tabur dan saus, lalu isi stoknya per kasir. Pilihan di halaman kasir mengikuti stok miliknya.</p>
             </div>
-            <button type="button" class="btn btn-potato" onclick="bukaTambah('tabur')">
-                <i class="bi bi-plus-lg me-1"></i> Tambah bumbu
-            </button>
+            <div class="d-flex gap-2 flex-wrap">
+                @if ($kasirTerpilih)
+                    <button type="button" class="btn btn-outline-secondary" onclick="tampil('modalIsiSemua')">
+                        <i class="bi bi-box-seam me-1"></i> Isi Semua Stok
+                    </button>
+                @endif
+                <button type="button" class="btn btn-potato" onclick="bukaTambah('tabur')">
+                    <i class="bi bi-plus-lg me-1"></i> Tambah bumbu
+                </button>
+            </div>
         </div>
 
         @if (session('sukses'))
@@ -50,6 +57,8 @@
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
         @endif
+
+        @include('layouts.partials.pilih-kasir')
 
         <div class="row g-3 mb-4">
             <div class="col-12 col-md-4">
@@ -138,7 +147,7 @@
                                             </form>
                                             <hr class="my-1 opacity-25">
                                             <form method="POST" action="{{ route('admin.bumbu.destroy', $b) }}"
-                                                data-konfirmasi="Hapus {{ $b->nama }}? Riwayat transaksi lama tetap aman.">
+                                                data-judul="Hapus {{ $b->nama }}?" data-konfirmasi="Riwayat transaksi lama tetap aman.">
                                                 @csrf @method('DELETE')
                                                 <button class="dropdown-item danger"><i class="bi bi-trash3"></i> Hapus</button>
                                             </form>
@@ -179,19 +188,16 @@
                         <div class="form-text">Nama ini yang tampil di pilihan kasir dan struk.</div>
                     </div>
                     <div class="row g-3">
-                        <div class="col-4">
-                            <label class="form-label small">Stok awal</label>
-                            <input type="number" name="stok" class="form-control" value="50" min="0" required>
-                        </div>
-                        <div class="col-4">
+                        <div class="col-6">
                             <label class="form-label small">Stok minimum</label>
                             <input type="number" name="stok_minimum" class="form-control" value="20" min="0" required>
                         </div>
-                        <div class="col-4">
+                        <div class="col-6">
                             <label class="form-label small">Satuan</label>
                             <input type="text" name="satuan" class="form-control" value="porsi" maxlength="20" required>
                         </div>
                     </div>
+                    <div class="form-text mt-2">Stok awal 0. Isi stoknya per kasir lewat tombol tambah stok setelah bumbu dibuat.</div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Batal</button>
@@ -206,6 +212,7 @@
         <div class="modal-dialog modal-dialog-centered modal-sm">
             <form class="modal-content" method="POST" id="formStok">
                 @csrf
+                <input type="hidden" name="kasir_id" value="{{ optional($kasirTerpilih)->id }}">
                 <div class="modal-header">
                     <h6 class="modal-title fw-bold" id="stokJudul">Tambah stok</h6>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -231,6 +238,7 @@
         <div class="modal-dialog modal-dialog-centered">
             <form class="modal-content" method="POST" id="formEdit">
                 @csrf @method('PUT')
+                <input type="hidden" name="kasir_id" value="{{ optional($kasirTerpilih)->id }}">
                 <div class="modal-header">
                     <h6 class="modal-title fw-bold">Ubah data bumbu</h6>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -254,7 +262,7 @@
                             <input type="text" name="satuan" id="editSatuan" class="form-control" maxlength="20" required>
                         </div>
                     </div>
-                    <div class="form-text mt-2">Mengubah angka stok di sini berarti koreksi stok (misalnya setelah hitung ulang).</div>
+                    <div class="form-text mt-2">Angka stok di sini adalah stok kasir yang dipilih di atas. Mengubahnya berarti koreksi stok kasir itu (misalnya setelah hitung ulang).</div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Batal</button>
@@ -263,7 +271,49 @@
             </form>
         </div>
     </div>
+
+    @if ($kasirTerpilih)
+        {{-- Modal isi semua stok bumbu untuk kasir terpilih: semua jadi 50 --}}
+        <div class="modal fade" id="modalIsiSemua" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+                <form class="modal-content" method="POST" action="{{ route('admin.bumbu.isi-semua') }}">
+                    @csrf
+                    <input type="hidden" name="kasir_id" value="{{ $kasirTerpilih->id }}">
+                    <div class="modal-header">
+                        <h6 class="modal-title fw-bold">Isi semua stok bumbu
+                            <span class="text-muted fw-normal">untuk {{ $kasirTerpilih->name }}</span></h6>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="small mb-3">Semua bumbu dan saus di bawah dibuat jadi <b>{{ \App\Services\StokService::STOK_STANDAR }}</b> (sama seperti Master). Yang sudah {{ \App\Services\StokService::STOK_STANDAR }} atau lebih tidak diubah. Mau isi jumlah lain untuk satu bumbu saja? Pakai tombol <b>Stok</b> di barisnya.</p>
+                        <div class="mb-3">
+                            <label class="form-label small">Tanggal exp</label>
+                            <input type="date" name="tanggal_exp" class="form-control form-control-sm"
+                                value="{{ \App\Services\StokService::expDefault('bumbu') }}" min="{{ now()->format('Y-m-d') }}">
+                            <div class="form-text">Otomatis 30 hari dari hari ini, bisa diubah.</div>
+                        </div>
+                        @foreach (['Bumbu Tabur' => $tabur, 'Saus' => $saus] as $judul => $daftar)
+                            @if ($daftar->isNotEmpty())
+                                <div class="fw-bold small mb-1 mt-2">{{ $judul }}</div>
+                                @foreach ($daftar as $b)
+                                    <div class="d-flex justify-content-between py-1 border-bottom small">
+                                        <span class="fw-semibold">{{ $b->nama }}</span>
+                                        <span class="text-muted">{{ number_format($b->stok, 0, ',', '.') }} → <b class="text-dark">{{ max($b->stok, \App\Services\StokService::STOK_STANDAR) }}</b></span>
+                                    </div>
+                                @endforeach
+                            @endif
+                        @endforeach
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Batal</button>
+                        <button class="btn btn-potato btn-sm">Isi semua jadi {{ \App\Services\StokService::STOK_STANDAR }}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    @endif
 @endsection
+
 
 @push('scripts')
     <script>

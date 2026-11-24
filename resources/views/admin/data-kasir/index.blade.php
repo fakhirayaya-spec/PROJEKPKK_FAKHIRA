@@ -21,6 +21,12 @@
         </div>
     @endif
 
+    @if(session('gagal'))
+        <div class="alert alert-danger alert-dismissible fade show">{{ session('gagal') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    @endif
+
     <div class="row g-3 mb-3">
         <div class="col-6 col-lg-3">
             <div class="stat-card">
@@ -131,12 +137,30 @@
                                 </form>
 
                                 <form action="{{ route('admin.kasir.reset-password', $kasir) }}" method="POST" class="d-inline"
-                                      onsubmit="return confirm('Reset password {{ $kasir->name }} ke: password123 ?')">
+                                      data-judul="Reset password?" data-ya="Ya, reset" data-tipe="tanya"
+                                      data-konfirmasi="Password {{ $kasir->name }} akan direset menjadi: password123">
                                     @csrf @method('PATCH')
                                     <button type="submit" class="btn btn-sm btn-outline-warning" title="Reset Password">
                                         <i class="bi bi-key"></i>
                                     </button>
                                 </form>
+
+                                @php $alasanHapus = $kasir->alasanTidakBisaDihapus(); @endphp
+                                @if($alasanHapus)
+                                    <span title="{{ $alasanHapus }}" style="cursor: not-allowed;">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" disabled style="pointer-events: none;">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </span>
+                                @else
+                                    <form action="{{ route('admin.kasir.destroy', $kasir) }}" method="POST" class="d-inline"
+                                          data-judul="Hapus akun kasir?" data-konfirmasi="Akun {{ $kasir->name }} akan dihapus permanen dan tidak bisa dikembalikan.">
+                                        @csrf @method('DELETE')
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Hapus kasir (belum punya transaksi & stok)">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                @endif
                             </div>
                         </td>
                     </tr>

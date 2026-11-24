@@ -19,25 +19,34 @@ class TransaksiController extends Controller
     // Tambahan harga per pilihan ukuran (dihitung di server biar tidak bisa dimanipulasi dari luar)
     public const UKURAN_EXTRA = [
         'Reguler' => 0,
-        'Jumbo' => 3000,
+        'Jumbo' => 5000,
     ];
 
     // Biaya kalau pembeli menambah saus di menu yang bumbu tabur-nya sudah bawaan
-    public const HARGA_SAUS_TAMBAHAN = 2000;
+    public const HARGA_SAUS_TAMBAHAN = 3000;
 
     public const TANPA_SAUS = 'Tanpa Saus Tambahan';
     public const TANPA_BUBUK = 'Tanpa Bubuk Tabur';
 
     public function index()
     {
-        $menus = Menu::aktif()->with(['kategori', 'sausBawaan', 'bubukBawaan'])->where('stok', '>', 0)->orderBy('nama_menu')->get();
+        $kasirId = (int) auth()->id();
 
-        // Pilihan saus & bubuk tabur diambil dari Manajemen Bumbu (hanya yang aktif dan masih ada stok)
-        $sausList = Bumbu::tersedia()->jenis('saus')->orderBy('nama')->get(['nama', 'stok', 'satuan']);
-        $bubukList = Bumbu::tersedia()->jenis('tabur')->orderBy('nama')->get(['nama', 'stok', 'satuan']);
+        // Hanya menu yang masih ada stok di kasir ini; angka stok yang tampil = stok milik kasir ini
+        $menuAda = array_keys(array_filter(StokService::petaStok('menu', $kasirId), fn ($s) => $s > 0));
+        $menus = Menu::aktif()->with(['kategori', 'sausBawaan', 'bubukBawaan'])->whereIn('id', $menuAda)->orderBy('nama_menu')->get();
+        StokService::terapkanStokKasir($menus, 'menu', $kasirId);
 
-        // Stok semua bumbu aktif (termasuk bumbu bawaan menu) untuk pengecekan di keranjang
-        $stokBumbu = Bumbu::aktif()->pluck('stok', 'nama');
+        // Pilihan saus & bubuk tabur diambil dari Manajemen Bumbu (hanya yang aktif dan masih ada stok di kasir ini)
+        $petaBumbu = StokService::petaStok('bumbu', $kasirId);
+        $bumbuAda = array_keys(array_filter($petaBumbu, fn ($s) => $s > 0));
+        $sausList = Bumbu::aktif()->jenis('saus')->whereIn('id', $bumbuAda)->orderBy('nama')->get(['id', 'nama', 'stok', 'satuan']);
+        $bubukList = Bumbu::aktif()->jenis('tabur')->whereIn('id', $bumbuAda)->orderBy('nama')->get(['id', 'nama', 'stok', 'satuan']);
+        StokService::terapkanStokKasir($sausList, 'bumbu', $kasirId);
+        StokService::terapkanStokKasir($bubukList, 'bumbu', $kasirId);
+
+        // Stok semua bumbu aktif milik kasir ini (termasuk bumbu bawaan menu) untuk pengecekan di keranjang
+        $stokBumbu = Bumbu::aktif()->get(['id', 'nama'])->mapWithKeys(fn ($b) => [$b->nama => $petaBumbu[$b->id] ?? 0]);
 
         return view('kasir.transaksi.index', [
             'stokBumbu' => $stokBumbu,
@@ -54,7 +63,7 @@ class TransaksiController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'metode_bayar' => ['required', 'in:cash,qris'],
+            'metode_bayar' => ['required', 'in:cash,qris,paylater'],
             'uang_diterima' => ['nullable', 'integer', 'min:0'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.menu_id' => ['required', 'exists:menus,id'],
@@ -65,6 +74,7 @@ class TransaksiController extends Controller
         ]);
 
         $transaksi = DB::transaction(function () use ($validated) {
+            $kasirId = (int) auth()->id(); // stok menu & bumbu yang dipakai = stok kasir ini
             $total = 0;
             $itemsSiap = [];
             $pakaiMenu = [];   // total qty per menu di keranjang ini
@@ -74,13 +84,14 @@ class TransaksiController extends Controller
                 $menu = Menu::lockForUpdate()->findOrFail($item['menu_id']);
 
                 $pakaiMenu[$menu->id] = ($pakaiMenu[$menu->id] ?? 0) + $item['qty'];
-                if ($menu->stok < $pakaiMenu[$menu->id]) {
-                    abort(422, "Stok {$menu->nama_menu} tidak cukup.");
+                $stokMenu = StokService::stokDi($menu, $kasirId);
+                if ($stokMenu < $pakaiMenu[$menu->id]) {
+                    abort(422, "Stok {$menu->nama_menu} tidak cukup (sisa di stokmu: {$stokMenu}). Minta Admin menambah stok.");
                 }
 
                 // Aturan bumbu per menu (server yang menentukan, bukan kiriman dari browser):
                 //  - menu bersaus  : saus terkunci, bubuk tabur boleh dipilih (gratis)
-                //  - menu berbubuk : bubuk terkunci, saus tambahan boleh dipilih (+Rp 2.000)
+                //  - menu berbubuk : bubuk terkunci, saus tambahan boleh dipilih (+Rp 3.000)
                 //  - menu tanpa bumbu bawaan (mis. minuman): tidak ada pilihan
                 $sausTerkunci = (bool) $menu->saus_bawaan_id;
                 $bubukTerkunci = (bool) $menu->bubuk_bawaan_id;
@@ -90,11 +101,11 @@ class TransaksiController extends Controller
                 $tambahanSaus = 0;
 
                 if ($sausTerkunci) {
-                    $saus = $this->pakaiBawaan($menu->sausBawaan, $item['qty'], $pakaiBumbu);
+                    $saus = $this->pakaiBawaan($menu->sausBawaan, $item['qty'], $pakaiBumbu, $kasirId);
                     $labelSaus = $saus->nama;
                 } elseif ($bisaTambahSaus) {
                     $labelSaus = $item['saus'] ?: self::TANPA_SAUS;
-                    $saus = $this->ambilBumbu('saus', $labelSaus, self::TANPA_SAUS, $item['qty'], $pakaiBumbu);
+                    $saus = $this->ambilBumbu('saus', $labelSaus, self::TANPA_SAUS, $item['qty'], $pakaiBumbu, $kasirId);
                     $tambahanSaus = $saus ? self::HARGA_SAUS_TAMBAHAN : 0;
                 } else {
                     $saus = null;
@@ -102,11 +113,11 @@ class TransaksiController extends Controller
                 }
 
                 if ($bubukTerkunci) {
-                    $bubuk = $this->pakaiBawaan($menu->bubukBawaan, $item['qty'], $pakaiBumbu);
+                    $bubuk = $this->pakaiBawaan($menu->bubukBawaan, $item['qty'], $pakaiBumbu, $kasirId);
                     $labelBubuk = $bubuk->nama;
                 } elseif ($bisaPilihBubuk) {
                     $labelBubuk = $item['bubuk_tabur'] ?: self::TANPA_BUBUK;
-                    $bubuk = $this->ambilBumbu('tabur', $labelBubuk, self::TANPA_BUBUK, $item['qty'], $pakaiBumbu);
+                    $bubuk = $this->ambilBumbu('tabur', $labelBubuk, self::TANPA_BUBUK, $item['qty'], $pakaiBumbu, $kasirId);
                 } else {
                     $bubuk = null;
                     $labelBubuk = null;
@@ -170,12 +181,13 @@ class TransaksiController extends Controller
                 ]);
 
                 // Kurangi stok & catat pergerakan stok keluar
-                StokService::keluar($item['menu'], $item['qty']);
+                StokService::keluar($item['menu'], $item['qty'], $kasirId);
                 $item['menu']->increment('total_terjual', $item['qty']);
 
                 PergerakanStok::create([
                     'menu_id' => $item['menu']->id,
                     'user_id' => auth()->id(),
+                    'kasir_id' => $kasirId,
                     'jenis' => 'keluar',
                     'jumlah' => $item['qty'],
                     'keterangan' => 'Transaksi ' . $transaksi->kode_transaksi,
@@ -185,7 +197,7 @@ class TransaksiController extends Controller
                 // Kurangi stok saus & bumbu tabur yang dipilih (1 porsi per qty)
                 foreach (['saus_model', 'bubuk_model'] as $kunci) {
                     if ($item[$kunci]) {
-                        StokService::keluar($item[$kunci], $item['qty']);
+                        StokService::keluar($item[$kunci], $item['qty'], $kasirId);
                     }
                 }
             }
@@ -202,7 +214,7 @@ class TransaksiController extends Controller
     /**
      * Pakai bumbu bawaan menu (saus/bubuk yang terkunci) & pastikan aktif dan stoknya cukup.
      */
-    private function pakaiBawaan(?Bumbu $bawaan, int $qty, array &$pakai): Bumbu
+    private function pakaiBawaan(?Bumbu $bawaan, int $qty, array &$pakai, int $kasirId): Bumbu
     {
         abort_if(! $bawaan, 422, 'Bumbu bawaan menu tidak ditemukan. Hubungi admin.');
 
@@ -210,7 +222,7 @@ class TransaksiController extends Controller
         abort_if(! $bumbu || $bumbu->status !== 'aktif', 422, "\"{$bawaan->nama}\" sedang nonaktif, menu ini belum bisa dijual.");
 
         $pakai[$bumbu->id] = ($pakai[$bumbu->id] ?? 0) + $qty;
-        abort_if($bumbu->stok < $pakai[$bumbu->id], 422, "Stok {$bumbu->nama} tidak cukup.");
+        abort_if(StokService::stokDi($bumbu, $kasirId) < $pakai[$bumbu->id], 422, "Stok {$bumbu->nama} tidak cukup di stokmu. Minta Admin menambah stok.");
 
         return $bumbu;
     }
@@ -219,7 +231,7 @@ class TransaksiController extends Controller
      * Cari bumbu yang dipilih kasir & pastikan stoknya cukup.
      * Mengembalikan null kalau kasir memilih "Tanpa ...".
      */
-    private function ambilBumbu(string $jenis, string $nama, string $labelTanpa, int $qty, array &$pakai): ?Bumbu
+    private function ambilBumbu(string $jenis, string $nama, string $labelTanpa, int $qty, array &$pakai, int $kasirId): ?Bumbu
     {
         if ($nama === $labelTanpa) {
             return null;
@@ -229,7 +241,7 @@ class TransaksiController extends Controller
         abort_if(! $bumbu, 422, "\"{$nama}\" tidak tersedia. Muat ulang halaman transaksi.");
 
         $pakai[$bumbu->id] = ($pakai[$bumbu->id] ?? 0) + $qty;
-        abort_if($bumbu->stok < $pakai[$bumbu->id], 422, "Stok {$bumbu->nama} tidak cukup.");
+        abort_if(StokService::stokDi($bumbu, $kasirId) < $pakai[$bumbu->id], 422, "Stok {$bumbu->nama} tidak cukup di stokmu. Minta Admin menambah stok.");
 
         return $bumbu;
     }

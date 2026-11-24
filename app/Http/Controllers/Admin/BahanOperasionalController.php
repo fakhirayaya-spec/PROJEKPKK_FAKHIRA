@@ -43,7 +43,7 @@ class BahanOperasionalController extends Controller
 
         BahanOperasional::create($data);
 
-        return back()->with('sukses', "Bahan \"{$data['nama']}\" ditambahkan. Semua kasir otomatis mendapat stok awal {$data['stok_awal']} {$data['satuan']}.");
+        return back()->with('sukses', "Bahan \"{$data['nama']}\" ditambahkan. Stok tiap kasir mulai dari 0, isi lewat tombol Isi Ulang.");
     }
 
     public function update(Request $request, BahanOperasional $bahan)

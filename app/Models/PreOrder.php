@@ -20,11 +20,15 @@ class PreOrder extends Model
         'dibatalkan' => 'Dibatalkan',
     ];
 
-    /** Minimal jumlah produk (pcs, semua menu dijumlah) dalam satu pre-order */
-    public const MIN_PCS = 10;
+    /** Aturan pre-order (ubah angkanya di sini kalau aturan dari pemilik usaha berubah) */
+    public const MIN_PCS = 10;        // minimal 10 pcs (kurang dari 10 ditolak)
+    public const DP_MIN_PERSEN = 50;  // DP minimal (persen dari total pesanan)
 
-    /** DP wajib minimal sekian persen dari total pembelian */
-    public const DP_MIN_PERSEN = 50;
+    /** DP minimal dalam rupiah untuk total tertentu (dibulatkan ke atas, sama dengan hitungan di form) */
+    public static function dpMinimal(int $total): int
+    {
+        return (int) ceil($total * self::DP_MIN_PERSEN / 100);
+    }
 
     protected $fillable = [
         'kode_preorder', 'user_id', 'nama_pelanggan', 'no_whatsapp', 'tanggal_ambil', 'jam_ambil',
@@ -71,12 +75,6 @@ class PreOrder extends Model
     public function getLabelStatusAttribute(): string
     {
         return self::LABEL_STATUS[$this->status] ?? ucfirst($this->status);
-    }
-
-    /** DP minimal (50% dari total, dibulatkan ke atas ke rupiah) */
-    public static function dpMinimal(int $total): int
-    {
-        return (int) ceil($total * self::DP_MIN_PERSEN / 100);
     }
 
     /** Sisa yang harus dibayar pelanggan saat mengambil pesanan */
@@ -187,6 +185,9 @@ class PreOrder extends Model
             return;
         }
 
+        // Stok dipotong dari kasir yang membuat pre-order (kalau tidak ada, dari yang memproses)
+        $kasirId = (int) ($this->user_id ?: $oleh->id);
+
         $items = $this->items()->get();
         if ($items->isEmpty()) {
             throw ValidationException::withMessages(['status' => 'Pre-order tidak punya item.']);
@@ -204,8 +205,9 @@ class PreOrder extends Model
             }
             $menus[$item->id] = $menu;
             $pakaiMenu[$menu->id] = ($pakaiMenu[$menu->id] ?? 0) + $item->qty;
-            if ($menu->stok < $pakaiMenu[$menu->id]) {
-                throw ValidationException::withMessages(['status' => "Stok {$menu->nama_menu} kurang (tersedia {$menu->stok}, dibutuhkan {$pakaiMenu[$menu->id]}). Tambah stok dulu di Manajemen Stok."]);
+            $stokMenu = StokService::stokDi($menu, $kasirId);
+            if ($stokMenu < $pakaiMenu[$menu->id]) {
+                throw ValidationException::withMessages(['status' => "Stok {$menu->nama_menu} kurang (tersedia {$stokMenu} di kasir ini, dibutuhkan {$pakaiMenu[$menu->id]}). Tambah stok kasir ini dulu di Manajemen Stok."]);
             }
 
             foreach ([
@@ -221,19 +223,21 @@ class PreOrder extends Model
                 }
                 $bumbus[$item->id][$kunci] = $bumbu;
                 $pakaiBumbu[$bumbu->id] = ($pakaiBumbu[$bumbu->id] ?? 0) + $item->qty;
-                if ($bumbu->stok < $pakaiBumbu[$bumbu->id]) {
-                    throw ValidationException::withMessages(['status' => "Stok {$bumbu->nama} kurang (tersedia {$bumbu->stok}, dibutuhkan {$pakaiBumbu[$bumbu->id]}). Tambah stok dulu di Manajemen Bumbu."]);
+                $stokBumbu = StokService::stokDi($bumbu, $kasirId);
+                if ($stokBumbu < $pakaiBumbu[$bumbu->id]) {
+                    throw ValidationException::withMessages(['status' => "Stok {$bumbu->nama} kurang (tersedia {$stokBumbu} di kasir ini, dibutuhkan {$pakaiBumbu[$bumbu->id]}). Tambah stok kasir ini dulu di Manajemen Bumbu."]);
                 }
             }
         }
 
         foreach ($items as $item) {
             $menu = $menus[$item->id];
-            StokService::keluar($menu, (int) $item->qty);
+            StokService::keluar($menu, (int) $item->qty, $kasirId);
 
             PergerakanStok::create([
                 'menu_id' => $menu->id,
                 'user_id' => $oleh->id,
+                'kasir_id' => $kasirId,
                 'jenis' => 'keluar',
                 'jumlah' => $item->qty,
                 'keterangan' => 'Pre-order ' . $this->kode_preorder . ' diproses',
@@ -241,7 +245,7 @@ class PreOrder extends Model
             ]);
 
             foreach ($bumbus[$item->id] ?? [] as $bumbu) {
-                StokService::keluar($bumbu, (int) $item->qty);
+                StokService::keluar($bumbu, (int) $item->qty, $kasirId);
             }
         }
 
@@ -251,14 +255,17 @@ class PreOrder extends Model
     /** Kembalikan stok yang sudah dipotong (dipakai saat pre-order dibatalkan). */
     private function kembalikanStok(User $oleh): void
     {
+        $kasirId = (int) ($this->user_id ?: $oleh->id);
+
         foreach ($this->items()->get() as $item) {
             $menu = $item->menu_id ? Menu::lockForUpdate()->find($item->menu_id) : null;
             if ($menu) {
-                StokService::kembali($menu, (int) $item->qty);
+                StokService::kembali($menu, (int) $item->qty, $kasirId);
 
                 PergerakanStok::create([
                     'menu_id' => $menu->id,
                     'user_id' => $oleh->id,
+                    'kasir_id' => $kasirId,
                     'jenis' => 'masuk',
                     'jumlah' => $item->qty,
                     'keterangan' => 'Batal pre-order ' . $this->kode_preorder,
@@ -273,7 +280,7 @@ class PreOrder extends Model
                 if ($nama && $nama !== $tanpa) {
                     $bumbu = Bumbu::lockForUpdate()->where('jenis', $jenis)->where('nama', $nama)->first();
                     if ($bumbu) {
-                        StokService::kembali($bumbu, (int) $item->qty);
+                        StokService::kembali($bumbu, (int) $item->qty, $kasirId);
                     }
                 }
             }

@@ -53,10 +53,10 @@
                                     </div>
                                 </div>
                                 <div class="col-12">
-                                    <label class="form-label">No. WhatsApp <span class="text-muted fw-normal">(opsional, kalau diisi harus 13 digit)</span></label>
+                                    <label class="form-label">No. WhatsApp <span class="text-muted fw-normal">(opsional, kalau diisi harus 12 digit)</span></label>
                                     <div class="input-group">
                                         <span class="input-group-text"><i class="bi bi-whatsapp"></i></span>
-                                        <input type="text" name="no_whatsapp" value="{{ old('no_whatsapp') }}" inputmode="numeric" pattern="[0-9]{13}" minlength="13" maxlength="13" class="form-control @error('no_whatsapp') is-invalid @enderror" placeholder="13 digit, contoh 0812345678901">
+                                        <input type="text" name="no_whatsapp" value="{{ old('no_whatsapp') }}" inputmode="numeric" pattern="[0-9]{12}" minlength="12" maxlength="12" class="form-control @error('no_whatsapp') is-invalid @enderror" placeholder="12 digit, contoh 081234567890">
                                     </div>
                                 </div>
                                 <div class="col-7">

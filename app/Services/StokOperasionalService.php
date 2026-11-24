@@ -32,7 +32,7 @@ class StokOperasionalService
         return BahanOperasional::aktif()->orderBy('urutan')->orderBy('id')->get();
     }
 
-    /** Pastikan kasir punya baris stok untuk semua bahan aktif (dibuat dengan stok awal bahan). */
+    /** Pastikan kasir punya baris stok untuk semua bahan aktif (dibuat dengan stok 0, diisi admin lewat Isi Ulang). */
     public static function pastikan(int $userId, ?Collection $aktif = null): void
     {
         $aktif ??= self::bahanAktif();
@@ -40,45 +40,83 @@ class StokOperasionalService
 
         foreach ($aktif as $bahan) {
             if (! in_array($bahan->kode, $ada, true)) {
-                $baris = StokOperasional::firstOrCreate(
+                // Kasir/bahan baru mulai dari 0: admin yang mengisi (lewat Isi Ulang), jadi tidak ada biaya stok awal.
+                StokOperasional::firstOrCreate(
                     ['user_id' => $userId, 'bahan' => $bahan->kode],
-                    ['stok' => $bahan->stok_awal]
+                    ['stok' => 0]
                 );
-
-                // Stok awal ini dibeli pemilik usaha, jadi biayanya ikut dicatat di Pengeluaran
-                // (hanya saat baris stok baru dibuat, jadi tidak pernah tercatat dua kali).
-                if ($baris->wasRecentlyCreated) {
-                    self::catatBiayaAwal($userId, $bahan);
-                }
             }
         }
     }
 
     /**
-     * Catat biaya stok awal ke Pengeluaran (kategori mengikuti pengaturan bahan, sama seperti biaya isi ulang).
-     * Biaya = (stok awal / isi per unit) x harga per unit. Kalau harga per unit belum diisi, tidak ada yang dicatat.
+     * Catat biaya pengisian ke Pengeluaran (kategori mengikuti pengaturan bahan).
+     * Biaya = (jumlah stok / isi per unit) x harga per unit. Kalau harga per unit belum diisi, tidak ada yang dicatat.
      */
-    private static function catatBiayaAwal(int $userId, BahanOperasional $bahan): void
+    private static function catatBiayaStok(User $kasir, BahanOperasional $bahan, int $jumlah, ?int $adminId): void
     {
         $isi = max((int) $bahan->isi_per_unit, 1);
         $harga = (int) $bahan->harga_per_unit;
-        $unit = ((int) $bahan->stok_awal) / $isi;
+        $unit = $jumlah / $isi;
         $biaya = (int) round($unit * $harga);
 
         if ($harga <= 0 || $biaya <= 0) {
             return;
         }
 
-        $namaKasir = User::whereKey($userId)->value('name') ?? 'kasir';
         $unitTeks = floor($unit) == $unit ? (string) (int) $unit : rtrim(rtrim(number_format($unit, 2, '.', ''), '0'), '.');
 
         Pengeluaran::create([
             'tanggal' => today(),
             'kategori' => $bahan->kategori_pengeluaran ?: 'operasional',
-            'deskripsi' => Str::limit("Stok awal {$bahan->nama}: {$unitTeks} {$bahan->unit_isi} untuk kasir {$namaKasir}", 150, ''),
+            'deskripsi' => Str::limit("Stok awal {$bahan->nama}: {$unitTeks} {$bahan->unit_isi} untuk kasir {$kasir->name}", 150, ''),
             'jumlah' => $biaya,
-            'user_id' => null,
+            'user_id' => $adminId,
         ]);
+    }
+
+    /**
+     * "Isi Semua Stok": tiap bahan aktif milik kasir dibuat jadi stok awal bahannya
+     * (gas 50, minyak 50, dus 100, cup 100, es batu 50, dst.). Yang sudah segitu atau lebih dilewati.
+     * Biayanya dicatat di Pengeluaran. Return: jumlah bahan yang diisi.
+     */
+    public static function isiSemua(User $kasir, User $admin): int
+    {
+        $aktif = self::bahanAktif();
+        self::pastikan($kasir->id, $aktif);
+
+        $stok = StokOperasional::where('user_id', $kasir->id)->lockForUpdate()->get()->keyBy('bahan');
+        $diisi = 0;
+
+        foreach ($aktif as $bahan) {
+            $baris = $stok[$bahan->kode] ?? null;
+            if (! $baris) {
+                continue;
+            }
+
+            $kurang = (int) $bahan->stok_awal - (int) $baris->stok;
+            if ($kurang <= 0) {
+                continue;
+            }
+
+            $baris->stok = $baris->stok + $kurang;
+            $baris->save();
+
+            RiwayatStokOperasional::create([
+                'user_id' => $kasir->id,
+                'bahan' => $bahan->kode,
+                'jenis' => 'isi_ulang',
+                'jumlah' => $kurang,
+                'saldo' => $baris->stok,
+                'dilakukan_oleh' => $admin->id,
+                'keterangan' => 'Isi semua stok (jadi ' . (int) $bahan->stok_awal . ')',
+            ]);
+
+            self::catatBiayaStok($kasir, $bahan, $kurang, $admin->id);
+            $diisi++;
+        }
+
+        return $diisi;
     }
 
     /** Stok bahan aktif milik satu kasir, berurutan, dengan kunci kode bahan: ['gas' => StokOperasional, ...] */

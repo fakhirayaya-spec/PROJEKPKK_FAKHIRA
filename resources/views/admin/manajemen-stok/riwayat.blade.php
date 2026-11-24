@@ -14,9 +14,9 @@
 @section('content')
 <div class="p-4" style="background-color: #fcf8f2; min-height: calc(100vh - 68px);">
     <div class="mb-4">
-        <h4 class="fw-bold mb-1 text-potato-brown">Riwayat Stok — {{ $menu->nama_menu }}</h4>
+        <h4 class="fw-bold mb-1 text-potato-brown">Riwayat Stok — {{ $menu->nama_menu }} <span class="text-muted fw-normal fs-6">· {{ $kasirTerpilih->name }}</span></h4>
         <p class="text-muted small mb-0">Stok saat ini: <strong>{{ $menu->stok }}</strong> | 20 pergerakan terakhir.</p>
-        <a href="{{ route('admin.stok.index') }}" class="small text-decoration-none">&larr; Kembali ke Manajemen Stok</a>
+        <a href="{{ route('admin.stok.index', ['kasir' => $kasirTerpilih->id]) }}" class="small text-decoration-none">&larr; Kembali ke Manajemen Stok</a>
     </div>
 
     @if(\App\Services\StokService::pakaiExp($menu))

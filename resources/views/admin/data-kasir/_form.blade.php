@@ -124,10 +124,10 @@
                         <label class="form-label">Nomor telepon <span class="text-danger">*</span></label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="bi bi-telephone"></i></span>
-                            <input type="text" name="no_telepon" value="{{ old('no_telepon', $edit ? $kasir->no_telepon : '') }}" required inputmode="numeric" pattern="[0-9]{13}" minlength="13" maxlength="13" class="form-control @error('no_telepon') is-invalid @enderror" placeholder="13 digit, contoh 0812345678901">
+                            <input type="text" name="no_telepon" value="{{ old('no_telepon', $edit ? $kasir->no_telepon : '') }}" required inputmode="numeric" pattern="[0-9]{12}" minlength="12" maxlength="12" class="form-control @error('no_telepon') is-invalid @enderror" placeholder="12 digit, contoh 081234567890">
                             @error('no_telepon') <div class="invalid-feedback">{{ $message }}</div> @enderror
                         </div>
-                        <div class="form-text">Harus tepat 13 digit angka.</div>
+                        <div class="form-text">Harus tepat 12 digit angka.</div>
                     </div>
                     <div class="col-12">
                         <label class="form-label">Alamat</label>

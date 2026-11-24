@@ -21,6 +21,8 @@ use App\Http\Controllers\Kasir\StokOperasionalController as KasirStokOperasional
 use App\Http\Controllers\Kasir\ProfilController as KasirProfilController;
 use App\Http\Controllers\Kasir\TransaksiController as KasirTransaksiController;
 use App\Http\Controllers\Kasir\RiwayatController as KasirRiwayatController;
+use App\Http\Controllers\Kasir\PermintaanStokController as KasirPermintaanStokController;
+use App\Http\Controllers\Admin\PermintaanStokController as AdminPermintaanStokController;
 
 // {kasir} hanya boleh angka (id). Tanpa ini, PUT /kasir/profil (ganti foto kasir) ikut tertangkap
 // rute admin PUT /kasir/{kasir}, lalu dianggap id "profil" dan hasilnya 404 Not Found.
@@ -45,11 +47,13 @@ $rutePreorderLihat = function () {
 // ============ KHUSUS ADMIN ============
 Route::middleware(['auth', 'role:admin'])->group(function () use ($rutePreorderLihat) {
     Route::get('/stok', [StokController::class, 'index'])->name('admin.stok.index');
+    Route::post('/stok/isi-semua', [StokController::class, 'isiSemua'])->name('admin.stok.isi-semua');
     Route::post('/stok/{menu}/tambah', [StokController::class, 'tambahStok'])->name('admin.stok.tambah');
     Route::get('/stok/{menu}/riwayat', [StokController::class, 'riwayat'])->name('admin.stok.riwayat');
     // Stok operasional per kasir (gas, minyak, dus, cup, es batu): admin lihat semua, isi ulang, riwayat
     Route::get('/stok-operasional', [AdminStokOperasionalController::class, 'index'])->name('admin.stok-operasional.index');
     Route::get('/stok-operasional/riwayat', [AdminStokOperasionalController::class, 'riwayat'])->name('admin.stok-operasional.riwayat');
+    Route::post('/stok-operasional/{user}/isi-semua', [AdminStokOperasionalController::class, 'isiSemua'])->name('admin.stok-operasional.isi-semua');
     Route::post('/stok-operasional/{user}/isi-ulang', [AdminStokOperasionalController::class, 'isiUlang'])->name('admin.stok-operasional.isi-ulang');
     // Kelola daftar bahan operasional (tambah bahan baru, aturan, gambar, nonaktifkan, hapus)
     Route::get('/stok-operasional/bahan', [BahanOperasionalController::class, 'index'])->name('admin.stok-operasional.bahan.index');
@@ -57,10 +61,15 @@ Route::middleware(['auth', 'role:admin'])->group(function () use ($rutePreorderL
     Route::put('/stok-operasional/bahan/{bahan}', [BahanOperasionalController::class, 'update'])->name('admin.stok-operasional.bahan.update');
     Route::patch('/stok-operasional/bahan/{bahan}/toggle', [BahanOperasionalController::class, 'toggle'])->name('admin.stok-operasional.bahan.toggle');
     Route::delete('/stok-operasional/bahan/{bahan}', [BahanOperasionalController::class, 'destroy'])->name('admin.stok-operasional.bahan.destroy');
+    // Pengajuan stok dari kasir: admin menyetujui (stok bertambah) atau menolak
+    Route::get('/permintaan-stok', [AdminPermintaanStokController::class, 'index'])->name('admin.permintaan-stok.index');
+    Route::post('/permintaan-stok/{permintaan}/setujui', [AdminPermintaanStokController::class, 'setujui'])->name('admin.permintaan-stok.setujui');
+    Route::post('/permintaan-stok/{permintaan}/tolak', [AdminPermintaanStokController::class, 'tolak'])->name('admin.permintaan-stok.tolak');
     // Manajemen bumbu (bumbu tabur & saus)
     Route::get('/bumbu', [BumbuController::class, 'index'])->name('admin.bumbu.index');
     Route::post('/bumbu', [BumbuController::class, 'store'])->name('admin.bumbu.store');
     Route::put('/bumbu/{bumbu}', [BumbuController::class, 'update'])->name('admin.bumbu.update');
+    Route::post('/bumbu/isi-semua', [BumbuController::class, 'isiSemua'])->name('admin.bumbu.isi-semua');
     Route::post('/bumbu/{bumbu}/tambah', [BumbuController::class, 'tambahStok'])->name('admin.bumbu.tambah');
     Route::patch('/bumbu/{bumbu}/toggle', [BumbuController::class, 'toggle'])->name('admin.bumbu.toggle');
     Route::delete('/bumbu/{bumbu}', [BumbuController::class, 'destroy'])->name('admin.bumbu.destroy');
@@ -106,6 +115,11 @@ Route::middleware(['auth', 'role:kasir'])->prefix('kasir')->name('kasir.')->grou
 
     // Stok operasional milik kasir sendiri (read-only) + riwayat pemakaiannya
     Route::get('/stok-operasional', [KasirStokOperasionalController::class, 'index'])->name('stok-operasional.index');
+
+    // Kasir mengajukan stok (operasional / menu / bumbu) ke admin
+    Route::get('/permintaan-stok', [KasirPermintaanStokController::class, 'index'])->name('permintaan-stok.index');
+    Route::post('/permintaan-stok', [KasirPermintaanStokController::class, 'store'])->name('permintaan-stok.store');
+    Route::post('/permintaan-stok/{permintaan}/batal', [KasirPermintaanStokController::class, 'batal'])->name('permintaan-stok.batal');
 
     Route::get('/riwayat', [KasirRiwayatController::class, 'index'])->name('riwayat.index');
 

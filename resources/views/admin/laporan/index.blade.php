@@ -27,7 +27,7 @@
             <p class="text-muted small mb-0">Laporan penjualan, keuangan, pre-order, dan stok untuk periode yang dipilih.</p>
         </div>
         <div class="d-flex gap-2 no-print">
-            <a href="{{ route('admin.laporan.cetak', request()->query()) }}" target="_blank" class="btn btn-outline-potato btn-sm">
+            <a href="{{ route('admin.laporan.cetak', request()->query()) }}" class="btn btn-outline-potato btn-sm">
                 <i class="bi bi-printer"></i> Cetak PDF
             </a>
         </div>

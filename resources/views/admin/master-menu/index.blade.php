@@ -80,7 +80,7 @@
                         <th>KATEGORI</th>
                         <th class="text-end">HARGA JUAL</th>
                         <th class="text-end">MODAL</th>
-                        <th class="text-center">STOK</th>
+                        <th class="text-center">STOK (TOTAL)</th>
                         <th class="text-center">STATUS</th>
                         <th class="text-end">TERJUAL</th>
                         <th class="text-center">AKSI</th>
@@ -188,7 +188,7 @@
                     @forelse($kategoris as $k)
                         <li class="list-group-item d-flex justify-content-between align-items-center" style="font-size: 13px;">
                             {{ $k->nama_kategori }}
-                            <form action="{{ route('admin.kategori-menu.destroy', $k) }}" method="POST" data-konfirmasi="Hapus kategori ini?">
+                            <form action="{{ route('admin.kategori-menu.destroy', $k) }}" method="POST" data-judul="Hapus kategori ini?" data-konfirmasi="Kategori akan dihapus. Pastikan sudah tidak dipakai menu mana pun.">
                                 @csrf @method('DELETE')
                                 <button type="submit" class="btn btn-sm text-danger border-0"><i class="bi bi-trash"></i></button>
                             </form>

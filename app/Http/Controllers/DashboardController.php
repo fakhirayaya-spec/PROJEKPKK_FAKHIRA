@@ -7,6 +7,7 @@ use App\Models\Menu;
 use App\Models\Pengeluaran;
 use App\Models\Transaksi;
 use App\Models\User;
+use App\Services\StokService;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Http\Request;
@@ -37,29 +38,55 @@ class DashboardController extends Controller
         $totalKasir = User::kasir()->count();
         $kasirAktif = User::kasir()->aktif()->count();
 
-        // --- Stok: menu + saus + bumbu tabur (semua yang aktif) ---
-        $bahan = collect();
-        foreach (Menu::aktif()->with('kategori')->get() as $m) {
-            $bahan->push((object) [
-                'nama' => $m->nama_menu, 'jenis' => $m->kategori->nama_kategori ?? 'Menu',
-                'stok' => $m->stok, 'satuan' => 'pcs', 'status' => $m->status_stok,
-            ]);
-        }
-        foreach (Bumbu::aktif()->get() as $b) {
-            $bahan->push((object) [
-                'nama' => $b->nama, 'jenis' => $b->jenis === 'saus' ? 'Saus' : 'Bumbu tabur',
-                'stok' => $b->stok, 'satuan' => $b->satuan, 'status' => $b->status_stok,
-            ]);
-        }
+        // --- Stok: menu + saus + bumbu tabur, dihitung dari stok ASLI tiap kasir aktif ---
+        // Satu item dihitung sekali dengan status terburuknya di antara semua kasir
+        // (habis di satu kasir saja = habis). Item yang belum diisi untuk seorang kasir dianggap 0.
+        $barisKasir = $kasirAktif > 0 ? StokService::barisStokSemuaKasir() : collect();
 
-        $stokAman = $bahan->where('status', 'aman')->count();
-        $stokMenipis = $bahan->where('status', 'menipis')->count();
-        $stokHabis = $bahan->where('status', 'habis')->count();
-        $totalItemStok = max($bahan->count(), 1);
+        if ($barisKasir->isNotEmpty()) {
+            $urutanStatus = ['habis' => 0, 'menipis' => 1, 'aman' => 2];
+            $statusItem = $barisKasir->groupBy('kunci')
+                ->map(fn ($g) => $g->pluck('status')->sortBy(fn ($st) => $urutanStatus[$st])->first());
 
-        $peringatanStok = $bahan->whereIn('status', ['habis', 'menipis'])
-            ->sortBy(fn ($b) => [$b->status === 'habis' ? 0 : 1, $b->stok])
-            ->take(5)->values();
+            $stokAman = $statusItem->filter(fn ($st) => $st === 'aman')->count();
+            $stokMenipis = $statusItem->filter(fn ($st) => $st === 'menipis')->count();
+            $stokHabis = $statusItem->filter(fn ($st) => $st === 'habis')->count();
+            $totalItemStok = max($statusItem->count(), 1);
+
+            // Daftar peringatan: per kasir, supaya jelas stok kasir mana yang bermasalah
+            $peringatanStok = $barisKasir->whereIn('status', ['habis', 'menipis'])
+                ->sortBy(fn ($b) => [$urutanStatus[$b->status], $b->stok])
+                ->take(5)->values()
+                ->map(function ($b) {
+                    $b->nama = $b->nama . ' · ' . $b->kasir;
+
+                    return $b;
+                });
+        } else {
+            // Belum ada kasir aktif: pakai angka Master
+            $bahan = collect();
+            foreach (Menu::aktif()->with('kategori')->get() as $m) {
+                $bahan->push((object) [
+                    'nama' => $m->nama_menu, 'jenis' => $m->kategori->nama_kategori ?? 'Menu',
+                    'stok' => $m->stok, 'satuan' => 'pcs', 'status' => $m->status_stok,
+                ]);
+            }
+            foreach (Bumbu::aktif()->get() as $b) {
+                $bahan->push((object) [
+                    'nama' => $b->nama, 'jenis' => $b->jenis === 'saus' ? 'Saus' : 'Bumbu tabur',
+                    'stok' => $b->stok, 'satuan' => $b->satuan, 'status' => $b->status_stok,
+                ]);
+            }
+
+            $stokAman = $bahan->where('status', 'aman')->count();
+            $stokMenipis = $bahan->where('status', 'menipis')->count();
+            $stokHabis = $bahan->where('status', 'habis')->count();
+            $totalItemStok = max($bahan->count(), 1);
+
+            $peringatanStok = $bahan->whereIn('status', ['habis', 'menipis'])
+                ->sortBy(fn ($b) => [$b->status === 'habis' ? 0 : 1, $b->stok])
+                ->take(5)->values();
+        }
 
         // --- Penjualan hari ini vs kemarin ---
         $penjualanHariIni = (int) Transaksi::hariIni()->where('status', 'selesai')->sum('total');

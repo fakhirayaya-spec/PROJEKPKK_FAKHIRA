@@ -84,6 +84,20 @@ class StokOperasionalController extends Controller
         return back()->with('sukses', "{$bahan->nama} milik {$user->name} ditambah {$tambah} {$bahan->satuan}. Pengeluaran Rp " . number_format((int) $data['biaya'], 0, ',', '.') . ' tercatat.');
     }
 
+    /** Isi semua bahan milik satu kasir sekaligus (gas 50, minyak 50, dus 100, cup 100, es batu 50) */
+    public function isiSemua(User $user)
+    {
+        abort_unless($user->role === 'kasir', 404);
+
+        $diisi = DB::transaction(fn () => StokOperasionalService::isiSemua($user, auth()->user()));
+
+        if ($diisi === 0) {
+            return back()->with('sukses', "Semua stok operasional {$user->name} sudah penuh, tidak ada yang perlu diisi.");
+        }
+
+        return back()->with('sukses', "{$diisi} bahan operasional milik {$user->name} sudah diisi. Biayanya tercatat di Pengeluaran.");
+    }
+
     /** Riwayat pemakaian semua kasir (bisa difilter per kasir / bahan / jenis) */
     public function riwayat(Request $request)
     {

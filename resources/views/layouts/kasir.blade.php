@@ -22,6 +22,7 @@
             'Info' => [
                 ['kasir.stok.index', 'bi-boxes', 'Cek Stok', 'kasir.stok.*'],
                 ['kasir.stok-operasional.index', 'bi-fuel-pump', 'Stok Operasional', 'kasir.stok-operasional.*'],
+                ['kasir.permintaan-stok.index', 'bi-send-plus', 'Ajukan Stok', 'kasir.permintaan-stok.*'],
                 ['kasir.profil.edit', 'bi-person-circle', 'Profil', 'kasir.profil.*'],
             ],
         ],

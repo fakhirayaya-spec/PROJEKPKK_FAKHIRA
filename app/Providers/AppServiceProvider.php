@@ -4,8 +4,9 @@ namespace App\Providers;
 
 use App\Models\Bumbu;
 use App\Models\Menu;
-use App\Services\StokOperasionalService;
+use App\Services\StokService;
 use App\Support\FotoStorage;
+use App\Services\StokOperasionalService;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
@@ -17,15 +18,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        // Foto (menu, kasir, admin, bahan) disimpan langsung di public/storage supaya selalu tampil,
-        // tanpa tergantung `php artisan storage:link`. Foto lama di storage/app/public dipindah otomatis (sekali).
+        // Foto upload (menu, kasir, admin, bahan) disimpan langsung ke public/storage, tempat browser membacanya.
+        // Tanpa ini, kalau public/storage berupa folder biasa (bukan symlink), foto baru tersimpan di
+        // storage/app/public dan tidak pernah tampil.
         config(['filesystems.disks.public.root' => public_path('storage')]);
-
-        try {
-            FotoStorage::siapkan(public_path('storage'), storage_path('app/public'), storage_path('framework/foto_tersinkron'));
-        } catch (\Throwable $e) {
-            report($e);
-        }
     }
 
     /**
@@ -34,6 +30,13 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Paginator::useBootstrapFive();
+
+        // Pastikan public/storage ada, dan pindahkan foto lama dari storage/app/public (sekali saja)
+        try {
+            FotoStorage::siapkan(public_path('storage'), storage_path('app/public'), storage_path('app/.foto_dipindah'));
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         // Tabel bumbu dibuat otomatis kalau belum ada, jadi tidak perlu migrate manual
         if (! $this->app->runningInConsole()) {
@@ -53,21 +56,40 @@ class AppServiceProvider extends ServiceProvider
             }
 
             try {
-                Menu::aktif()->whereColumn('stok', '<=', 'stok_minimum')->orderBy('stok')->get()
-                    ->each(fn ($m) => $alert->push([
-                        'nama' => $m->nama_menu,
-                        'jenis' => 'Menu',
-                        'stok' => $m->stok,
-                        'status' => $m->stok <= 0 ? 'habis' : 'menipis',
-                    ]));
+                if (auth()->user()->role === 'kasir') {
+                    // Kasir diingatkan soal stok miliknya sendiri
+                    $kasirId = (int) auth()->id();
+                    $menus = Menu::aktif()->get();
+                    $bumbus = Bumbu::aktif()->get();
+                    StokService::terapkanStokKasir($menus, 'menu', $kasirId);
+                    StokService::terapkanStokKasir($bumbus, 'bumbu', $kasirId);
 
-                Bumbu::aktif()->whereColumn('stok', '<=', 'stok_minimum')->orderBy('stok')->get()
-                    ->each(fn ($b) => $alert->push([
-                        'nama' => $b->nama,
-                        'jenis' => $b->jenis === 'saus' ? 'Saus' : 'Bumbu tabur',
-                        'stok' => $b->stok,
-                        'status' => $b->stok <= 0 ? 'habis' : 'menipis',
-                    ]));
+                    $menus->filter(fn ($m) => $m->stok <= $m->stok_minimum)->sortBy('stok')
+                        ->each(fn ($m) => $alert->push([
+                            'nama' => $m->nama_menu,
+                            'jenis' => 'Menu',
+                            'stok' => $m->stok,
+                            'status' => $m->stok <= 0 ? 'habis' : 'menipis',
+                        ]));
+
+                    $bumbus->filter(fn ($b) => $b->stok <= $b->stok_minimum)->sortBy('stok')
+                        ->each(fn ($b) => $alert->push([
+                            'nama' => $b->nama,
+                            'jenis' => $b->jenis === 'saus' ? 'Saus' : 'Bumbu tabur',
+                            'stok' => $b->stok,
+                            'status' => $b->stok <= 0 ? 'habis' : 'menipis',
+                        ]));
+                } else {
+                    // Admin: stok menipis/habis di kasir MANA PUN, lengkap dengan nama kasirnya
+                    StokService::barisStokSemuaKasir()
+                        ->whereIn('status', ['habis', 'menipis'])
+                        ->each(fn ($b) => $alert->push([
+                            'nama' => $b->nama . ' · ' . $b->kasir,
+                            'jenis' => $b->jenis,
+                            'stok' => $b->stok,
+                            'status' => $b->status,
+                        ]));
+                }
             } catch (\Throwable $e) {
                 // tabel bumbu belum dimigrasi: lonceng tetap tampil tanpa data bumbu
             }

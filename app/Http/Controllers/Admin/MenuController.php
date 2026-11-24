@@ -59,22 +59,10 @@ class MenuController extends Controller
         $urutanBerikutnya = (Menu::max('id') ?? 0) + 1;
         $data['kode_menu'] = 'MN-' . str_pad($urutanBerikutnya, 3, '0', STR_PAD_LEFT);
         $data['total_terjual'] = 0;
-        $data['stok'] = (int) ($data['stok'] ?? 0);
+        $data['stok'] = 0; // stok diisi per kasir lewat Manajemen Stok
         $data['stok_minimum'] = (int) ($data['stok_minimum'] ?? 5);
 
         $menu = Menu::create($data);
-
-        if ($menu->stok > 0) {
-            StokService::sinkron($menu, 'Stok awal saat menu dibuat');
-            PergerakanStok::create([
-                'menu_id' => $menu->id,
-                'user_id' => auth()->id(),
-                'jenis' => 'masuk',
-                'jumlah' => $menu->stok,
-                'keterangan' => 'Stok awal saat menu dibuat',
-                'tanggal' => today(),
-            ]);
-        }
 
         return redirect()->route('admin.menu.index')->with('sukses', 'Menu baru berhasil ditambahkan.');
     }
@@ -137,11 +125,8 @@ class MenuController extends Controller
             'saus_bawaan_id' => 'nullable|exists:bumbus,id',
             'bubuk_bawaan_id' => 'nullable|exists:bumbus,id',
             'deskripsi' => 'nullable|string',
-            'gambar' => 'nullable|image|mimes:jpg,jpeg,png|max:5120',
+            'gambar' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
             'status' => 'required|in:aktif,nonaktif',
-        ], [
-            'gambar.max' => 'Ukuran foto maksimal 5 MB.',
-            'gambar.uploaded' => 'Foto gagal diunggah. Ukuran maksimal 5 MB (dan batas upload di php.ini minimal 5M).',
         ]);
 
         $data['harga_modal'] = (int) ($data['harga_modal'] ?? 0);

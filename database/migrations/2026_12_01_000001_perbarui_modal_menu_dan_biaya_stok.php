@@ -5,7 +5,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Harga modal baru per menu, lalu biaya "Stok awal" menu di Pengeluaran dihitung ulang (50 porsi x modal).
+ * Harga modal baru per menu, lalu catatan "Stok awal" menu lama di Pengeluaran dibuang (stok awal 0).
  *  - varian tabur : modal Rp 6.000
  *  - varian saus  : modal Rp 8.000
  *  - matcha       : modal Rp 10.000
@@ -17,8 +17,6 @@ use Illuminate\Support\Facades\Schema;
  */
 return new class extends Migration
 {
-    private const STOK_AWAL = 50;
-
     public function up(): void
     {
         DB::transaction(function () {
@@ -36,27 +34,7 @@ return new class extends Migration
             // 2) Catatan biaya stok awal MENU yang lama dibuang (bentuknya "Stok awal <menu>: N porsi x Rp ...")
             DB::table('pengeluarans')->where('deskripsi', 'like', 'Stok awal %: % porsi x Rp %')->delete();
 
-            // 3) Dicatat ulang: 50 x harga modal, kategori Bahan Baku
-            $baris = [];
-            foreach (DB::table('menus')->orderBy('id')->get(['nama_menu', 'harga_modal']) as $menu) {
-                $modal = (int) $menu->harga_modal;
-                if ($modal <= 0) {
-                    continue;
-                }
-                $baris[] = [
-                    'tanggal' => today()->toDateString(),
-                    'kategori' => 'bahan_baku',
-                    'deskripsi' => mb_substr('Stok awal ' . $menu->nama_menu . ': ' . self::STOK_AWAL . ' porsi x Rp ' . number_format($modal, 0, ',', '.'), 0, 150),
-                    'jumlah' => self::STOK_AWAL * $modal,
-                    'user_id' => null,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ];
-            }
-
-            foreach (array_chunk($baris, 100) as $potongan) {
-                DB::table('pengeluarans')->insert($potongan);
-            }
+            // 3) Tidak dicatat ulang: stok awal menu 0, jadi pengeluarannya juga 0.
         });
     }
 

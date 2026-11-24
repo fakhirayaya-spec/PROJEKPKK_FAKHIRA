@@ -1,8 +1,5 @@
 <?php
 
-use App\Models\Bumbu;
-use App\Models\Menu;
-use App\Services\StokService;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -11,19 +8,16 @@ use Illuminate\Support\Str;
 /**
  * Mulai dari awal lagi (seperti baru buka), jalankan ulang setelah perubahan harga:
  *  - Semua transaksi & pre-order dihapus, total terjual menu = 0, riwayat pergerakan stok dibersihkan.
- *  - Master Menu & Manajemen Bumbu: stok 50 semua (batch exp dibuat ulang).
+ *  - Master Menu & Manajemen Bumbu: stok 0 (admin mengisi per kasir lewat Manajemen Stok / Bumbu).
  *  - Stok Operasional tiap kasir aktif: gas 50 (1 tabung), minyak 50 (5 liter), dus 100, cup 100, es batu 50.
  *  - Pengeluaran: catatan biaya stok lama ("Stok awal ..." / "Isi ulang ...") diganti catatan baru yang
- *      * Menu     : 50 x harga modal menu            (Bahan Baku)
  *      * Operasional: stok / isi per unit x harga per unit, per kasir (sesuai kategori bahan)
- *    Bumbu tidak dicatat sendiri karena modalnya sudah ikut di harga modal menu.
+ *    Menu & bumbu tidak dicatat (stok awal 0).
  *    Pengeluaran yang diketik admin sendiri (listrik, sewa, dll) tidak disentuh.
  * Tidak bisa dibatalkan.
  */
 return new class extends Migration
 {
-    private const STOK = 50;
-
     /** Stok awal bahan operasional yang diminta pemilik usaha */
     private const OPERASIONAL = ['gas' => 50, 'minyak' => 50, 'dus' => 100, 'cup' => 100, 'es' => 50];
 
@@ -68,30 +62,7 @@ return new class extends Migration
         DB::table('menus')->update(['stok' => 0, 'total_terjual' => 0]);
         DB::table('bumbus')->update(['stok' => 0]);
 
-        $tanggal = today()->toDateString();
-
-        foreach (Menu::with('kategori')->orderBy('id')->get() as $menu) {
-            if ($adaBatch) {
-                StokService::tambah($menu, self::STOK, null, 'Stok awal');
-            } else {
-                $menu->update(['stok' => self::STOK]);
-            }
-
-            if (Schema::hasTable('pergerakan_stoks')) {
-                DB::table('pergerakan_stoks')->insert([
-                    'menu_id' => $menu->id, 'user_id' => null, 'jenis' => 'masuk', 'jumlah' => self::STOK,
-                    'keterangan' => 'Stok awal', 'tanggal' => $tanggal, 'created_at' => now(), 'updated_at' => now(),
-                ]);
-            }
-        }
-
-        foreach (Bumbu::orderBy('id')->get() as $bumbu) {
-            if ($adaBatch) {
-                StokService::tambah($bumbu, self::STOK, null, 'Stok awal');
-            } else {
-                $bumbu->update(['stok' => self::STOK]);
-            }
-        }
+        // Stok menu & bumbu dibiarkan 0: admin yang mengisinya satu per satu untuk tiap kasir.
     }
 
     private function aturStokOperasionalDanBiaya(): void
@@ -105,27 +76,7 @@ return new class extends Migration
                 ->delete();
         }
 
-        // Biaya stok awal menu: 50 x harga modal (Bahan Baku)
-        if ($adaPengeluaran) {
-            $baris = [];
-            foreach (Menu::orderBy('id')->get(['nama_menu', 'harga_modal']) as $menu) {
-                $modal = (int) $menu->harga_modal;
-                if ($modal <= 0) {
-                    continue;
-                }
-                $baris[] = [
-                    'tanggal' => today()->toDateString(),
-                    'kategori' => 'bahan_baku',
-                    'deskripsi' => Str::limit('Stok awal ' . $menu->nama_menu . ': ' . self::STOK . ' porsi x Rp ' . number_format($modal, 0, ',', '.'), 150, ''),
-                    'jumlah' => self::STOK * $modal,
-                    'user_id' => null,
-                    'created_at' => now(), 'updated_at' => now(),
-                ];
-            }
-            foreach (array_chunk($baris, 100) as $potongan) {
-                DB::table('pengeluarans')->insert($potongan);
-            }
-        }
+        // Pengeluaran stok awal menu tidak dicatat (mulai dari 0). Pengeluaran dicatat lewat menu Pengeluaran.
 
         if (! Schema::hasTable('bahan_operasionals') || ! Schema::hasTable('stok_operasionals')) {
             return;

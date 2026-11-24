@@ -4,6 +4,10 @@
 @section('profil_url', route('admin.profil.edit'))
 @section('stok_url', route('admin.stok.index'))
 
+@php
+    try { $jmlPermintaan = \App\Models\PermintaanStok::menunggu()->count(); } catch (\Throwable $e) { $jmlPermintaan = 0; }
+@endphp
+
 @section('sidebar')
     @include('layouts.partials.sidebar', [
         'home' => route('dashboard'),
@@ -21,6 +25,7 @@
                 ['admin.stok.index', 'bi-boxes', 'Manajemen Stok', 'admin.stok.*'],
                 ['admin.bumbu.index', 'bi-droplet-half', 'Manajemen Bumbu', 'admin.bumbu.*'],
                 ['admin.stok-operasional.index', 'bi-fuel-pump', 'Stok Operasional', 'admin.stok-operasional.*'],
+                ['admin.permintaan-stok.index', 'bi-inbox', 'Permintaan Stok', 'admin.permintaan-stok.*', $jmlPermintaan ?: null],
                 ['admin.preorder.index', 'bi-calendar-check', 'Pre-Order', 'admin.preorder.*'],
                 ['admin.riwayat.index', 'bi-receipt', 'Riwayat Transaksi', 'admin.riwayat.*'],
             ],

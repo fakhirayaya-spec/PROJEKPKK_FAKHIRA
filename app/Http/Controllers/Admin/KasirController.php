@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\AturanPassword;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 
 class KasirController extends Controller
@@ -43,10 +45,10 @@ class KasirController extends Controller
             'alamat' => 'nullable|string|max:255',
             'jenis_kelamin' => 'nullable|in:L,P',
             'tanggal_lahir' => 'nullable|date|before:today',
-            'no_telepon' => 'required|digits:13',
+            'no_telepon' => 'required|digits:12',
         ], [
             'no_telepon.required' => 'Nomor telepon wajib diisi.',
-            'no_telepon.digits' => 'Nomor telepon harus tepat 13 digit angka (tanpa spasi atau tanda lain).',
+            'no_telepon.digits' => 'Nomor telepon harus tepat 12 digit angka (tanpa spasi atau tanda lain).',
         ] + AturanPassword::pesan());
 
         // Foto TIDAK diisi admin. Kasir mengunggah fotonya sendiri lewat menu Profil kasir.
@@ -79,10 +81,10 @@ class KasirController extends Controller
             'alamat' => 'nullable|string|max:255',
             'jenis_kelamin' => 'nullable|in:L,P',
             'tanggal_lahir' => 'nullable|date|before:today',
-            'no_telepon' => 'required|digits:13',
+            'no_telepon' => 'required|digits:12',
         ], [
             'no_telepon.required' => 'Nomor telepon wajib diisi.',
-            'no_telepon.digits' => 'Nomor telepon harus tepat 13 digit angka (tanpa spasi atau tanda lain).',
+            'no_telepon.digits' => 'Nomor telepon harus tepat 12 digit angka (tanpa spasi atau tanda lain).',
         ]);
 
         // Foto tidak bisa diubah dari sini (hanya kasir yang bersangkutan, di menu Profil).
@@ -93,13 +95,30 @@ class KasirController extends Controller
 
     public function destroy(User $kasir)
     {
+        // Hanya boleh dihapus kalau belum punya transaksi dan belum pernah ada stok masuk (lihat User::alasanTidakBisaDihapus)
+        if ($alasan = $kasir->alasanTidakBisaDihapus()) {
+            return back()->with('gagal', $alasan);
+        }
+
         if ($kasir->avatar) {
             Storage::disk('public')->delete($kasir->avatar);
         }
 
-        $kasir->delete();
+        DB::transaction(function () use ($kasir) {
+            // Bersihkan sisa baris kosong milik kasir ini (stok 0 yang dibuat otomatis, sesi login)
+            foreach (['stok_kasirs', 'stok_operasionals'] as $tabel) {
+                if (Schema::hasTable($tabel)) {
+                    DB::table($tabel)->where('user_id', $kasir->id)->delete();
+                }
+            }
+            if (Schema::hasTable('sessions')) {
+                DB::table('sessions')->where('user_id', $kasir->id)->delete();
+            }
 
-        return redirect()->route('admin.kasir.index')->with('sukses', 'Akun kasir berhasil dihapus.');
+            $kasir->delete();
+        });
+
+        return redirect()->route('admin.kasir.index')->with('sukses', 'Akun kasir ' . $kasir->name . ' berhasil dihapus.');
     }
 
     public function toggleStatus(User $kasir)

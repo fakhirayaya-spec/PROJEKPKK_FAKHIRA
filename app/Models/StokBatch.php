@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class StokBatch extends Model
 {
     protected $fillable = [
-        'tipe', 'item_id', 'jumlah_awal', 'sisa', 'dibuang',
+        'tipe', 'item_id', 'user_id', 'jumlah_awal', 'sisa', 'dibuang',
         'tanggal_masuk', 'tanggal_exp', 'dibuang_pada', 'keterangan',
     ];
 

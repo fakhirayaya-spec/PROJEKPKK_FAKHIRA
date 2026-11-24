@@ -9,7 +9,7 @@ class PergerakanStok extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['menu_id', 'user_id', 'jenis', 'jumlah', 'keterangan', 'tanggal'];
+    protected $fillable = ['menu_id', 'user_id', 'kasir_id', 'jenis', 'jumlah', 'keterangan', 'tanggal'];
 
     protected $casts = ['tanggal' => 'date'];
 

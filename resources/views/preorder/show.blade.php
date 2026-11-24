@@ -161,8 +161,8 @@
                     <div class="col-12"><label class="form-label small fw-semibold">Nama pemesan</label>
                         <input type="text" name="nama_pelanggan" value="{{ old('nama_pelanggan', $po->nama_pelanggan) }}" required maxlength="100" class="form-control"></div>
                     <div class="col-12"><label class="form-label small fw-semibold">No. WhatsApp</label>
-                        <input type="text" name="no_whatsapp" value="{{ old('no_whatsapp', $po->no_whatsapp) }}" inputmode="numeric" maxlength="20" class="form-control" placeholder="13 digit">
-                        <div class="form-text">Kalau diisi harus tepat 13 digit angka.</div></div>
+                        <input type="text" name="no_whatsapp" value="{{ old('no_whatsapp', $po->no_whatsapp) }}" inputmode="numeric" maxlength="20" class="form-control" placeholder="12 digit">
+                        <div class="form-text">Kalau diisi harus tepat 12 digit angka.</div></div>
                     <div class="col-7"><label class="form-label small fw-semibold">Tanggal ambil</label>
                         <input type="date" name="tanggal_ambil" value="{{ old('tanggal_ambil', $po->tanggal_ambil->format('Y-m-d')) }}" required class="form-control"></div>
                     <div class="col-5"><label class="form-label small fw-semibold">Jam</label>

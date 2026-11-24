@@ -54,9 +54,16 @@
 @section('content')
     <div class="p-4" style="background-color: #fcf8f2; min-height: calc(100vh - 68px);">
 
-        <div class="mb-4">
-            <h4 class="fw-bold mb-1 text-potato-brown">Manajemen Stok</h4>
-            <p class="text-muted small mb-0">Pantau stok tiap menu dan tambahkan stok masuk (restock).</p>
+        <div class="mb-4 d-flex align-items-start justify-content-between flex-wrap gap-2">
+            <div>
+                <h4 class="fw-bold mb-1 text-potato-brown">Manajemen Stok</h4>
+                <p class="text-muted small mb-0">Pantau stok tiap menu milik setiap kasir dan tambahkan stok masuk (restock) untuk kasir yang dipilih.</p>
+            </div>
+            @if ($kasirTerpilih)
+                <button type="button" class="btn btn-potato text-nowrap" data-bs-toggle="modal" data-bs-target="#modalIsiSemua">
+                    <i class="bi bi-box-seam me-1"></i> Isi Semua Stok
+                </button>
+            @endif
         </div>
 
         @if (session('sukses'))
@@ -65,8 +72,18 @@
             </div>
         @endif
 
+        @if ($errors->any())
+            <div class="alert alert-danger alert-dismissible fade show">
+                <b>Belum bisa disimpan:</b> {{ $errors->first() }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        @endif
+
+        @include('layouts.partials.pilih-kasir')
+
         <div class="card-custom bg-white p-3 mb-3">
             <form method="GET" class="row g-2 align-items-center">
+                <input type="hidden" name="kasir" value="{{ optional($kasirTerpilih)->id }}">
                 <div class="col-12 col-md-6">
                     <input type="text" name="cari" value="{{ request('cari') }}" class="form-control form-control-sm"
                         placeholder="Cari nama menu...">
@@ -128,7 +145,7 @@
                                             data-bs-target="#modalTambah{{ $menu->id }}">
                                             <i class="bi bi-plus-lg"></i> Tambah Stok
                                         </button>
-                                        <a href="{{ route('admin.stok.riwayat', $menu) }}"
+                                        <a href="{{ route('admin.stok.riwayat', ['menu' => $menu, 'kasir' => optional($kasirTerpilih)->id]) }}"
                                             class="btn btn-sm btn-outline-secondary">
                                             <i class="bi bi-clock-history"></i>
                                         </a>
@@ -140,12 +157,14 @@
                                             <div class="modal-content">
                                                 <div class="modal-header">
                                                     <h6 class="modal-title fw-bold text-potato-brown">Tambah Stok —
-                                                        {{ $menu->nama_menu }}</h6>
+                                                        {{ $menu->nama_menu }}
+                                                        <span class="text-muted fw-normal">untuk {{ optional($kasirTerpilih)->name }}</span></h6>
                                                     <button type="button" class="btn-close"
                                                         data-bs-dismiss="modal"></button>
                                                 </div>
                                                 <form action="{{ route('admin.stok.tambah', $menu) }}" method="POST">
                                                     @csrf
+                                                    <input type="hidden" name="kasir_id" value="{{ optional($kasirTerpilih)->id }}">
                                                     <div class="modal-body">
                                                         <div class="mb-3">
                                                             <label class="form-label small fw-semibold">Jumlah Masuk</label>
@@ -184,8 +203,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="7" class="text-center text-muted py-4">Belum ada menu. Tambahkan menu dulu
-                                    di Master Menu.</td>
+                                <td colspan="7" class="text-center text-muted py-4">{{ $kasirTerpilih ? 'Belum ada menu. Tambahkan menu dulu di Master Menu.' : 'Belum ada kasir aktif.' }}</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -196,4 +214,48 @@
             </div>
         </div>
     </div>
+
+    @if ($kasirTerpilih)
+        {{-- Modal isi semua stok untuk kasir terpilih: semua menu jadi 50 --}}
+        <div class="modal fade" id="modalIsiSemua" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+                <form class="modal-content" method="POST" action="{{ route('admin.stok.isi-semua') }}">
+                    @csrf
+                    <input type="hidden" name="kasir_id" value="{{ $kasirTerpilih->id }}">
+                    <div class="modal-header">
+                        <h6 class="modal-title fw-bold text-potato-brown">Isi Semua Stok
+                            <span class="text-muted fw-normal">untuk {{ $kasirTerpilih->name }}</span></h6>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="small mb-3">Semua menu di bawah dibuat jadi <b>{{ \App\Services\StokService::STOK_STANDAR }}</b> (sama seperti Master Menu). Menu yang sudah {{ \App\Services\StokService::STOK_STANDAR }} atau lebih tidak diubah. Mau isi jumlah lain untuk satu menu saja? Pakai tombol <b>Tambah Stok</b> di barisnya.</p>
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Tanggal Exp</label>
+                            <input type="date" name="tanggal_exp" class="form-control form-control-sm"
+                                value="{{ \App\Services\StokService::expDefault('menu') }}" min="{{ now()->format('Y-m-d') }}">
+                            <div class="form-text">Otomatis 14 hari dari hari ini, bisa diubah. Minuman tidak pakai exp.</div>
+                        </div>
+                        <table class="table table-sm align-middle mb-0" style="font-size: 13px;">
+                            <thead class="text-muted border-bottom" style="font-size: 11px;">
+                                <tr><th>MENU</th><th class="text-end">SEKARANG</th><th class="text-end">JADI</th></tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($daftarIsi as $m)
+                                    <tr>
+                                        <td class="fw-semibold text-potato-brown">{{ $m->nama_menu }}</td>
+                                        <td class="text-end">{{ $m->stok }}</td>
+                                        <td class="text-end fw-bold">{{ max($m->stok, \App\Services\StokService::STOK_STANDAR) }}</td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Batal</button>
+                        <button type="submit" class="btn btn-potato btn-sm">Isi Semua jadi {{ \App\Services\StokService::STOK_STANDAR }}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    @endif
 @endsection

@@ -111,12 +111,13 @@ class Transaksi extends Model
             foreach ($trx->items()->get() as $item) {
                 $menu = Menu::lockForUpdate()->find($item->menu_id);
                 if ($menu) {
-                    StokService::kembali($menu, (int) $item->qty);
+                    StokService::kembali($menu, (int) $item->qty, (int) $trx->user_id);
                     $menu->decrement('total_terjual', min((int) $menu->total_terjual, (int) $item->qty));
 
                     PergerakanStok::create([
                         'menu_id' => $menu->id,
                         'user_id' => $oleh->id,
+                        'kasir_id' => $trx->user_id,
                         'jenis' => 'masuk',
                         'jumlah' => $item->qty,
                         'keterangan' => 'Batal ' . $trx->kode_transaksi,
@@ -132,7 +133,7 @@ class Transaksi extends Model
                     if ($nama && $nama !== $tanpa) {
                         $bumbu = Bumbu::where('jenis', $jenis)->where('nama', $nama)->lockForUpdate()->first();
                         if ($bumbu) {
-                            StokService::kembali($bumbu, (int) $item->qty);
+                            StokService::kembali($bumbu, (int) $item->qty, (int) $trx->user_id);
                         }
                     }
                 }
