@@ -4,123 +4,156 @@
 
 @push('styles')
 <style>
-    .struk-box {
-        max-width: 380px;
-        margin: 0 auto;
-        background: #fff;
-        border: 1px dashed #d8cfc4;
-        border-radius: 12px;
-        padding: 20px;
-        font-family: 'Courier New', monospace;
-        color: #000;
-        position: relative;
-    }
-    .struk-box hr { border: 0; border-top: 1px dashed #999; margin: 10px 0; opacity: 1; }
-    .struk-batal { border: 2px solid #c0392b; color: #c0392b; text-align: center; font-weight: 800; letter-spacing: 2px; padding: 4px; margin-bottom: 10px; transform: rotate(-2deg); }
-    .struk-batal small { display: block; letter-spacing: 0; font-weight: 600; font-size: 10px; }
-    .struk-box.dibatalkan .baris-item { text-decoration: line-through; color: #888; }
+.struk-wrap { padding: 8px 0 4px; }
+.struk-kertas {
+    --tinta: #1f1f1f; --abu: #6f6f6f;
+    position: relative; max-width: 340px; margin: 0 auto; background: #fff; color: var(--tinta);
+    font-family: 'Courier New', Courier, monospace; font-size: 12.5px; line-height: 1.45;
+    padding: 22px 20px 18px; filter: drop-shadow(0 6px 14px rgba(61,35,20,.18));
+    background-image: repeating-linear-gradient(0deg, rgba(0,0,0,.012) 0 1px, transparent 1px 3px);
+}
+/* tepi kertas bergerigi */
+.struk-kertas::before, .struk-kertas::after {
+    content: ""; position: absolute; left: 0; right: 0; height: 9px; background-size: 14px 9px; background-repeat: repeat-x;
+}
+.struk-kertas::before { top: -8px; background-image: linear-gradient(135deg, transparent 75%, #fff 75%), linear-gradient(225deg, transparent 75%, #fff 75%); background-size: 12px 9px; }
+.struk-kertas::after { bottom: -8px; background-image: linear-gradient(45deg, transparent 75%, #fff 75%), linear-gradient(315deg, transparent 75%, #fff 75%); background-size: 12px 9px; }
 
-    /* Cetak: hanya struk yang keluar, pas untuk kertas struk 80mm */
-    @page { size: 80mm auto; margin: 4mm; }
-    @media print {
-        html, body { background: #fff !important; }
-        body * { visibility: hidden !important; }
-        .struk-box, .struk-box * { visibility: visible !important; }
-        .struk-box {
-            position: absolute; left: 0; top: 0;
-            width: 100%; max-width: none;
-            border: 0; border-radius: 0; padding: 0; margin: 0;
-            box-shadow: none;
-        }
-        .no-print { display: none !important; }
-    }
+.sk-logo { width: 46px; height: 46px; margin: 0 auto 6px; border: 2px solid var(--tinta); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+.sk-nama { font-size: 17px; font-weight: 700; letter-spacing: 1.5px; text-align: center; line-height: 1.2; }
+.sk-tag { text-align: center; font-size: 10.5px; color: var(--abu); letter-spacing: .5px; }
+.sk-garis { border: 0; border-top: 1px dashed #8a8a8a; margin: 10px 0; opacity: 1; }
+.sk-ganda { border: 0; border-top: 3px double #8a8a8a; margin: 10px 0; opacity: 1; }
+.sk-meta { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; font-size: 11.5px; }
+.sk-meta .k { color: var(--abu); }
+.sk-meta .v { text-align: right; word-break: break-all; }
+.sk-judul { text-align: center; font-weight: 700; letter-spacing: 3px; font-size: 11px; color: var(--abu); margin: 2px 0 6px; }
+.sk-item { margin-bottom: 7px; }
+.sk-item .nm { font-weight: 700; }
+.sk-item .ex { font-size: 10.5px; color: var(--abu); padding-left: 10px; }
+.sk-item .hg { display: flex; justify-content: space-between; gap: 8px; padding-left: 10px; }
+.sk-row { display: flex; justify-content: space-between; gap: 10px; }
+.sk-row.besar { font-size: 15px; font-weight: 700; }
+.sk-row.abu { color: var(--abu); font-size: 11.5px; }
+.sk-total { border-top: 1px solid var(--tinta); border-bottom: 1px solid var(--tinta); padding: 5px 0; margin: 8px 0; }
+.sk-pill { display: inline-block; border: 1.5px solid var(--tinta); border-radius: 4px; padding: 0 7px; font-weight: 700; font-size: 11px; letter-spacing: 1px; }
+.sk-stempel { text-align: center; margin: 8px 0 2px; }
+.sk-batal { border: 2.5px solid #c0392b; color: #c0392b; text-align: center; font-weight: 800; letter-spacing: 3px; padding: 5px; margin: 10px 8px; transform: rotate(-3deg); border-radius: 4px; font-size: 15px; }
+.sk-batal small { display: block; letter-spacing: 0; font-weight: 600; font-size: 10px; margin-top: 2px; }
+.struk-kertas.dibatalkan .sk-item, .struk-kertas.dibatalkan .sk-total { text-decoration: line-through; color: #8a8a8a; }
+.sk-barcode { display: flex; justify-content: center; align-items: stretch; height: 44px; margin: 12px auto 3px; padding: 0 4px; gap: 0; }
+.sk-barcode i { display: block; background: var(--tinta); }
+.sk-barcode i.s { background: transparent; }
+.sk-kode { text-align: center; font-size: 10.5px; letter-spacing: 2px; }
+.sk-terima { text-align: center; font-size: 11.5px; margin-top: 10px; }
+.sk-terima b { display: block; font-size: 13px; letter-spacing: 1px; }
+.sk-kecil { text-align: center; font-size: 10px; color: var(--abu); margin-top: 6px; }
+
+@page { size: 80mm auto; margin: 3mm; }
+@media print {
+    html, body { background: #fff !important; }
+    body * { visibility: hidden !important; }
+    .struk-kertas, .struk-kertas * { visibility: visible !important; }
+    .struk-kertas { position: absolute; left: 0; top: 0; width: 100%; max-width: none; margin: 0; padding: 0 1mm; filter: none; background-image: none; font-size: 11.5px; }
+    .struk-kertas::before, .struk-kertas::after { display: none; }
+    .no-print { display: none !important; }
+}
 </style>
 @endpush
 
 @section('content')
+@php
+    $jenisTrx = $transaksi->jenis ?? 'penjualan';
+    $kode = (string) $transaksi->kode_transaksi;
+    $rp = fn ($n) => number_format((int) $n, 0, ',', '.');
+    // Barcode hiasan dari kode transaksi (batang tebal-tipis bergantian)
+    $batang = [[1, true], [1, false], [1, true], [2, false]];
+    foreach (str_split($kode) as $c) {
+        $o = ord($c);
+        for ($i = 0; $i < 4; $i++) {
+            $batang[] = [(($o >> ($i * 2)) & 3) + 1, $i % 2 === 0];
+        }
+        $batang[] = [2, false];
+    }
+    array_push($batang, [1, true], [1, false], [1, true]);
+    $totalQty = (int) $transaksi->items->sum('qty');
+@endphp
 <div class="p-4" style="background-color: #fcf8f2; min-height: calc(100vh - 68px);">
 
     @if(session('sukses'))
-        <div class="alert alert-success no-print" style="max-width: 380px; margin: 0 auto 12px;">{{ session('sukses') }}</div>
+        <div class="alert alert-success no-print" style="max-width: 340px; margin: 0 auto 12px;">{{ session('sukses') }}</div>
     @endif
     @if($errors->any())
-        <div class="alert alert-danger no-print" style="max-width: 380px; margin: 0 auto 12px;">{{ $errors->first() }}</div>
+        <div class="alert alert-danger no-print" style="max-width: 340px; margin: 0 auto 12px;">{{ $errors->first() }}</div>
     @endif
 
-    <div class="struk-box {{ $transaksi->dibatalkan ? 'dibatalkan' : '' }}" id="struk">
-        <div class="text-center mb-2">
-            <div class="fw-bold" style="font-size: 15px;">POTATO CURLY CRUNCH</div>
-            <div style="font-size: 11px;">{{ $transaksi->kode_transaksi }}</div>
-            <div style="font-size: 11px;">{{ $transaksi->created_at->format('d M Y, H:i') }}</div>
-            <div style="font-size: 11px;">Kasir: {{ $transaksi->kasir->name ?? '-' }}</div>
+    <div class="struk-wrap">
+    <div class="struk-kertas {{ $transaksi->dibatalkan ? 'dibatalkan' : '' }}" id="struk">
+        <div class="sk-logo">🥔</div>
+        <div class="sk-nama">POTATO<br>CURLY CRUNCH</div>
+        <div class="sk-tag">Kentang spiral renyah · Dibuat segar</div>
+
+        <hr class="sk-garis">
+        <div class="sk-meta">
+            <span class="k">No</span><span class="v">{{ $kode }}</span>
+            <span class="k">Tanggal</span><span class="v">{{ $transaksi->created_at->format('d/m/Y H:i') }}</span>
+            <span class="k">Kasir</span><span class="v">{{ $transaksi->kasir->name ?? '-' }}</span>
+            @if($transaksi->preOrder)
+                <span class="k">Pre-order</span><span class="v">{{ $transaksi->preOrder->kode_preorder }}</span>
+            @endif
         </div>
 
         @if($transaksi->dibatalkan)
-            <div class="struk-batal">
+            <div class="sk-batal">
                 DIBATALKAN
-                <small>{{ $transaksi->dibatalkan_pada?->format('d M Y, H:i') }} · {{ $transaksi->alasan_batal }}</small>
+                <small>{{ $transaksi->dibatalkan_pada?->format('d/m/Y H:i') }} · {{ $transaksi->alasan_batal }}</small>
             </div>
         @endif
 
-        <hr>
-        @if(($transaksi->jenis ?? 'penjualan') === 'dp')
-            <div style="font-size: 12px;">Uang muka (DP) pre-order {{ $transaksi->preOrderAsal->kode_preorder ?? '' }}</div>
-        @endif
+        <hr class="sk-garis">
+        <div class="sk-judul">
+            {{ $jenisTrx === 'dp' ? 'UANG MUKA (DP)' : ($jenisTrx === 'pelunasan' ? 'PELUNASAN' : 'PESANAN') }}
+        </div>
+
         @foreach($transaksi->items as $item)
-            <div class="baris-item">
-                <div class="d-flex justify-content-between" style="font-size: 12px;">
-                    <span>{{ $item->menu->nama_menu ?? '(menu dihapus)' }} ({{ $item->ukuran }}) x{{ $item->qty }}</span>
-                    <span>{{ number_format($item->subtotal, 0, ',', '.') }}</span>
-                </div>
+            <div class="sk-item">
+                <div class="nm">{{ $item->menu->nama_menu ?? '(menu dihapus)' }}{{ $item->ukuran ? ' (' . $item->ukuran . ')' : '' }}</div>
                 @if($item->saus || $item->bubuk_tabur)
-                    <div style="font-size: 10px; color: #555;">{{ collect([$item->saus, $item->bubuk_tabur])->filter()->implode(' · ') }}</div>
+                    <div class="ex">{{ collect([$item->saus, $item->bubuk_tabur])->filter()->implode(' · ') }}</div>
                 @endif
+                <div class="hg">
+                    <span>{{ $item->qty }} x {{ $rp($item->harga_satuan) }}</span>
+                    <span>{{ $rp($item->subtotal) }}</span>
+                </div>
             </div>
         @endforeach
-        <hr>
 
-        @php $jenisTrx = $transaksi->jenis ?? 'penjualan'; @endphp
+        <hr class="sk-garis">
+        <div class="sk-row abu"><span>Jumlah item</span><span>{{ $totalQty }} pcs</span></div>
+
         @if($jenisTrx === 'pelunasan' && $transaksi->preOrder)
-            <div class="d-flex justify-content-between" style="font-size: 12px;">
-                <span>Total pesanan</span>
-                <span>Rp {{ number_format($transaksi->items->sum('subtotal'), 0, ',', '.') }}</span>
-            </div>
-            <div class="d-flex justify-content-between" style="font-size: 12px;">
-                <span>DP sudah dibayar</span>
-                <span>- Rp {{ number_format($transaksi->preOrder->dp, 0, ',', '.') }}</span>
-            </div>
-            <div class="d-flex justify-content-between fw-bold" style="font-size: 14px;">
-                <span>SISA DIBAYAR</span>
-                <span>Rp {{ number_format($transaksi->total, 0, ',', '.') }}</span>
-            </div>
+            <div class="sk-row abu"><span>Total pesanan</span><span>Rp {{ $rp($transaksi->items->sum('subtotal')) }}</span></div>
+            <div class="sk-row abu"><span>DP sudah dibayar</span><span>- Rp {{ $rp($transaksi->preOrder->dp) }}</span></div>
+            <div class="sk-total sk-row besar"><span>SISA BAYAR</span><span>Rp {{ $rp($transaksi->total) }}</span></div>
         @else
-            <div class="d-flex justify-content-between fw-bold" style="font-size: 14px;">
-                <span>{{ $jenisTrx === 'dp' ? 'DP DIBAYAR' : 'TOTAL' }}</span>
-                <span>Rp {{ number_format($transaksi->total, 0, ',', '.') }}</span>
-            </div>
+            <div class="sk-total sk-row besar"><span>{{ $jenisTrx === 'dp' ? 'DP DIBAYAR' : 'TOTAL' }}</span><span>Rp {{ $rp($transaksi->total) }}</span></div>
         @endif
-        <div class="d-flex justify-content-between" style="font-size: 12px;">
-            <span>Metode Bayar</span>
-            <span>{{ strtoupper($transaksi->metode_bayar) }}</span>
-        </div>
-        @if($transaksi->preOrder)
-            <div class="d-flex justify-content-between" style="font-size: 12px;">
-                <span>Pre-order</span>
-                <span>{{ $transaksi->preOrder->kode_preorder }}</span>
-            </div>
-        @endif
+
+        <div class="sk-row"><span>Bayar</span><span class="sk-pill">{{ strtoupper($transaksi->metode_bayar) }}</span></div>
         @if($transaksi->metode_bayar === 'cash' && $transaksi->uang_diterima !== null)
-            <div class="d-flex justify-content-between" style="font-size: 12px;">
-                <span>Uang diterima</span>
-                <span>Rp {{ number_format($transaksi->uang_diterima, 0, ',', '.') }}</span>
-            </div>
-            <div class="d-flex justify-content-between fw-bold" style="font-size: 12px;">
-                <span>Kembalian</span>
-                <span>Rp {{ number_format($transaksi->kembalian ?? 0, 0, ',', '.') }}</span>
-            </div>
+            <div class="sk-row"><span>Uang diterima</span><span>Rp {{ $rp($transaksi->uang_diterima) }}</span></div>
+            <div class="sk-row"><span>Kembalian</span><span>Rp {{ $rp($transaksi->kembalian ?? 0) }}</span></div>
         @endif
-        <hr>
-        <div class="text-center" style="font-size: 11px;">Terima kasih sudah beli Potato Curly Crunch!</div>
+
+        <hr class="sk-ganda">
+        <div class="sk-barcode" aria-hidden="true">
+            @foreach($batang as [$lebar, $hitam])<i class="{{ $hitam ? '' : 's' }}" style="width: {{ $lebar }}px"></i>@endforeach
+        </div>
+        <div class="sk-kode">{{ $kode }}</div>
+
+        <div class="sk-terima"><b>TERIMA KASIH!</b>Ditunggu pesanan berikutnya</div>
+        <div class="sk-kecil">Simpan struk ini sebagai bukti pembelian</div>
+    </div>
     </div>
 
     <div class="text-center mt-3 no-print d-flex flex-wrap justify-content-center gap-2">

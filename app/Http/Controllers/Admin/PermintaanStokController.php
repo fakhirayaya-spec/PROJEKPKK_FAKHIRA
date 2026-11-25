@@ -7,16 +7,14 @@ use App\Models\BahanOperasional;
 use App\Models\Bumbu;
 use App\Models\Menu;
 use App\Models\Pengeluaran;
-use App\Models\PergerakanStok;
 use App\Models\PermintaanStok;
-use App\Services\StokOperasionalService;
 use App\Services\StokService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
-/** Admin menyetujui / menolak pengajuan stok dari kasir. Stok baru bertambah saat disetujui. */
+/** Admin menyetujui / menolak pengajuan stok dari kasir. Stok baru bertambah setelah kasir mengonfirmasi barang diterima. */
 class PermintaanStokController extends Controller
 {
     public function index(Request $request)
@@ -35,6 +33,9 @@ class PermintaanStokController extends Controller
         $hargaBahan = BahanOperasional::pluck('harga_per_unit', 'kode');
 
         return view('admin.permintaan-stok.index', [
+            'hargaMenu' => Menu::pluck('harga_modal', 'id'),
+            'hargaBumbu' => Bumbu::all()->mapWithKeys(fn ($b) => [$b->id => $b->harga_bungkus_efektif]),
+            'isiBumbu' => Bumbu::all()->mapWithKeys(fn ($b) => [$b->id => $b->isi_bungkus_efektif]),
             'daftar' => $daftar,
             'status' => $status,
             'hitung' => PermintaanStok::selectRaw('status, COUNT(*) as n')->groupBy('status')->pluck('n', 'status'),
@@ -53,7 +54,7 @@ class PermintaanStokController extends Controller
             'jumlah.min' => 'Jumlah minimal 1.',
         ]);
 
-        $pesan = DB::transaction(function () use ($permintaan, $data) {
+        [$pesan, $biayaCatat] = DB::transaction(function () use ($permintaan, $data) {
             $p = PermintaanStok::lockForUpdate()->findOrFail($permintaan->id);
 
             if ($p->status !== 'menunggu') {
@@ -65,6 +66,8 @@ class PermintaanStokController extends Controller
             $kasir = $p->kasir;
             $admin = auth()->user();
 
+            // Admin hanya menyetujui (dan mencatat biaya belanja). Stok BARU masuk setelah kasir
+            // mengonfirmasi barangnya sudah diterima (Kasir\PermintaanStokController@konfirmasi).
             if ($p->jenis === 'operasional') {
                 // Sama seperti isi ulang manual: biaya wajib supaya tercatat di Pengeluaran
                 if ($biaya < 1) {
@@ -76,8 +79,6 @@ class PermintaanStokController extends Controller
                     throw ValidationException::withMessages(['jumlah' => "Bahan {$p->nama_item} sudah nonaktif atau dihapus, pengajuan tidak bisa disetujui."]);
                 }
 
-                $tambah = StokOperasionalService::isiUlang($kasir, $bahan, $jumlah, $admin, 'Pengajuan kasir disetujui');
-
                 Pengeluaran::create([
                     'tanggal' => today(),
                     'kategori' => $bahan->kategori_pengeluaran ?: 'operasional',
@@ -86,37 +87,36 @@ class PermintaanStokController extends Controller
                     'user_id' => $admin->id,
                 ]);
 
-                $hasil = "{$bahan->nama} milik {$kasir->name} ditambah {$tambah} {$bahan->satuan}";
+                $biayaTercatat = $biaya;
+                $hasil = "{$bahan->nama} untuk {$kasir->name}";
             } elseif ($p->jenis === 'menu') {
-                $menu = Menu::lockForUpdate()->find($p->item_id);
+                $menu = Menu::find($p->item_id);
                 if (! $menu) {
                     throw ValidationException::withMessages(['jumlah' => "Menu {$p->nama_item} sudah dihapus, pengajuan tidak bisa disetujui."]);
                 }
 
-                PergerakanStok::create([
-                    'menu_id' => $menu->id,
-                    'user_id' => $admin->id,
-                    'kasir_id' => $kasir->id,
-                    'jenis' => 'masuk',
-                    'jumlah' => $jumlah,
-                    'keterangan' => 'Pengajuan kasir ' . $kasir->name,
-                    'tanggal' => today(),
-                ]);
-                // stok masuk ke kasir yang mengajukan (bukan stok pusat)
-                StokService::tambah($menu, $jumlah, (int) $kasir->id, null, 'Pengajuan kasir ' . $kasir->name);
-
-                $this->catatBiayaBahanBaku($biaya, "Restock {$menu->nama_menu}: {$jumlah} porsi (pengajuan kasir {$kasir->name})", $admin->id);
-                $hasil = "Stok {$menu->nama_menu} bertambah {$jumlah} porsi";
+                // Biaya otomatis = jumlah x harga modal menu (kecuali admin mengisi angka lain)
+                $biayaTercatat = $biaya > 0 ? $biaya : $jumlah * (int) $menu->harga_modal;
+                if ($biaya > 0) {
+                    $this->catatBiayaBahanBaku($biaya, "Restock {$menu->nama_menu}: {$jumlah} porsi (pengajuan kasir {$kasir->name})", $admin->id);
+                } else {
+                    StokService::catatBiayaMenu($menu, $jumlah, (int) $kasir->id, $admin->id);
+                }
+                $hasil = "{$menu->nama_menu} {$jumlah} porsi untuk {$kasir->name}";
             } else {
-                $bumbu = Bumbu::lockForUpdate()->find($p->item_id);
+                $bumbu = Bumbu::find($p->item_id);
                 if (! $bumbu) {
                     throw ValidationException::withMessages(['jumlah' => "Bumbu {$p->nama_item} sudah dihapus, pengajuan tidak bisa disetujui."]);
                 }
 
-                StokService::tambah($bumbu, $jumlah, (int) $kasir->id, null, 'Pengajuan kasir ' . $kasir->name);
-
-                $this->catatBiayaBahanBaku($biaya, "Restock {$bumbu->nama}: {$jumlah} {$bumbu->satuan} (pengajuan kasir {$kasir->name})", $admin->id);
-                $hasil = "Stok {$bumbu->nama} bertambah {$jumlah} {$bumbu->satuan}";
+                // Biaya otomatis: bungkus x harga bungkus (pengajuan lama dalam porsi: porsi x harga per pakai).
+                // Admin boleh mengisi angka lain.
+                $perBungkus = $p->satuan === 'bungkus';
+                $biayaBumbu = $biaya > 0 ? $biaya : ($perBungkus ? $jumlah * $bumbu->harga_bungkus_efektif : $bumbu->biayaUntuk($jumlah));
+                $satuanTeks = $perBungkus ? 'bungkus' : $bumbu->satuan;
+                $biayaTercatat = $biayaBumbu;
+                $this->catatBiayaBahanBaku($biayaBumbu, "Restock {$bumbu->nama}: {$jumlah} {$satuanTeks} (pengajuan kasir {$kasir->name})", $admin->id);
+                $hasil = "{$bumbu->nama} {$jumlah} {$satuanTeks} untuk {$kasir->name}";
             }
 
             $p->update([
@@ -127,10 +127,14 @@ class PermintaanStokController extends Controller
                 'catatan_admin' => $data['catatan_admin'] ?? null,
             ]);
 
-            return $hasil;
+            return [$hasil, $biayaTercatat ?? 0];
         });
 
-        return back()->with('sukses', 'Pengajuan disetujui. ' . $pesan . '.');
+        $infoBiaya = $biayaCatat > 0
+            ? ' Biaya Rp ' . number_format($biayaCatat, 0, ',', '.') . ' tercatat di Pengeluaran.'
+            : ' Tidak ada biaya yang tercatat di Pengeluaran (biaya kosong / harga belum diisi).';
+
+        return back()->with('sukses', 'Pengajuan disetujui: ' . $pesan . '.' . $infoBiaya . ' Stok baru masuk setelah kasir mengonfirmasi barangnya diterima.');
     }
 
     public function tolak(Request $request, PermintaanStok $permintaan)

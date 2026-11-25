@@ -59,11 +59,16 @@
                 <h4 class="fw-bold mb-1 text-potato-brown">Manajemen Stok</h4>
                 <p class="text-muted small mb-0">Pantau stok tiap menu milik setiap kasir dan tambahkan stok masuk (restock) untuk kasir yang dipilih.</p>
             </div>
-            @if ($kasirTerpilih)
-                <button type="button" class="btn btn-potato text-nowrap" data-bs-toggle="modal" data-bs-target="#modalIsiSemua">
-                    <i class="bi bi-box-seam me-1"></i> Isi Semua Stok
-                </button>
-            @endif
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="{{ route('admin.stok.riwayat-semua') }}" class="btn btn-outline-secondary text-nowrap">
+                    <i class="bi bi-clock-history me-1"></i> Riwayat
+                </a>
+                @if ($kasirTerpilih)
+                    <button type="button" class="btn btn-potato text-nowrap" data-bs-toggle="modal" data-bs-target="#modalIsiSemua">
+                        <i class="bi bi-box-seam me-1"></i> Isi Semua Stok
+                    </button>
+                @endif
+            </div>
         </div>
 
         @if (session('sukses'))
@@ -114,7 +119,7 @@
                             <tr>
                                 <td>
                                     <div class="d-flex align-items-center gap-2">
-                                        <img src="{{ $menu->gambar ? asset('storage/' . $menu->gambar) : asset('assets_dashboard/images/spark-admin-free.png') }}"
+                                        <img src="{{ $menu->foto_url }}"
                                             class="thumb-stok">
                                         <span class="fw-semibold text-potato-brown">{{ $menu->nama_menu }}</span>
                                     </div>

@@ -9,6 +9,7 @@ use App\Services\StokService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 /**
@@ -50,9 +51,13 @@ class BumbuController extends Controller
             ],
             'stok_minimum' => ['required', 'integer', 'min:0'],
             'satuan' => ['required', 'string', 'max:20'],
+            'harga_per_bungkus' => ['nullable', 'integer', 'min:0', 'max:100000000'],
+            'isi_per_bungkus' => ['nullable', 'integer', 'min:1', 'max:100000'],
         ], [
             'nama.unique' => 'Nama itu sudah dipakai di kelompok yang sama.',
         ]);
+
+        $data = $this->dataBungkus($data, $data['jenis']);
 
         // Stok awal selalu 0: stok diisi per kasir lewat tombol tambah stok
         Bumbu::create($data + ['stok' => 0]);
@@ -71,12 +76,16 @@ class BumbuController extends Controller
             'stok' => ['required', 'integer', 'min:0'],
             'stok_minimum' => ['required', 'integer', 'min:0'],
             'satuan' => ['required', 'string', 'max:20'],
+            'harga_per_bungkus' => ['nullable', 'integer', 'min:0', 'max:100000000'],
+            'isi_per_bungkus' => ['nullable', 'integer', 'min:1', 'max:100000'],
         ], [
             'nama.unique' => 'Nama itu sudah dipakai di kelompok yang sama.',
         ]);
 
+        $data = $this->dataBungkus($data, $bumbu->jenis);
+
         DB::transaction(function () use ($bumbu, $data) {
-            $bumbu->update(Arr::only($data, ['nama', 'stok_minimum', 'satuan']));
+            $bumbu->update(Arr::only($data, ['nama', 'stok_minimum', 'satuan', 'harga_per_bungkus', 'isi_per_bungkus']));
 
             // angka stok di form = koreksi stok milik kasir yang dipilih (batch exp kasir itu ikut disesuaikan)
             StokService::koreksi($bumbu->refresh(), (int) $data['kasir_id'], (int) $data['stok'], 'Koreksi stok');
@@ -156,5 +165,21 @@ class BumbuController extends Controller
         });
 
         return back()->with('sukses', '"' . $nama . '" dihapus.');
+    }
+
+    /** Harga/isi bungkus kosong -> pakai bawaan jenisnya; dibuang kalau kolomnya belum ada (belum migrate) */
+    private function dataBungkus(array $data, string $jenis): array
+    {
+        if (! Schema::hasColumn('bumbus', 'harga_per_bungkus')) {
+            unset($data['harga_per_bungkus'], $data['isi_per_bungkus']);
+
+            return $data;
+        }
+
+        [$hargaBawaan, $isiBawaan] = Bumbu::BUNGKUS_BAWAAN[$jenis] ?? [0, 1];
+        $data['harga_per_bungkus'] = (int) ($data['harga_per_bungkus'] ?? 0) > 0 ? (int) $data['harga_per_bungkus'] : $hargaBawaan;
+        $data['isi_per_bungkus'] = (int) ($data['isi_per_bungkus'] ?? 0) > 0 ? (int) $data['isi_per_bungkus'] : $isiBawaan;
+
+        return $data;
     }
 }

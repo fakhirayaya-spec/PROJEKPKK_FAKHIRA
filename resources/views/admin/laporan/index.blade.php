@@ -30,8 +30,17 @@
             <a href="{{ route('admin.laporan.cetak', request()->query()) }}" class="btn btn-outline-potato btn-sm">
                 <i class="bi bi-printer"></i> Cetak PDF
             </a>
+            <a href="{{ route('admin.laporan.excel', request()->query()) }}" class="btn btn-outline-potato btn-sm">
+                <i class="bi bi-file-earmark-excel"></i> Unduh Excel
+            </a>
         </div>
     </div>
+
+    @if(session('gagal'))
+        <div class="alert alert-danger alert-dismissible fade show no-print">{{ session('gagal') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    @endif
 
     {{-- Filter periode --}}
     <div class="card-custom bg-white p-3 mb-3 no-print">
@@ -403,6 +412,57 @@
                 </tbody>
             </table>
         </div>
+    </div>
+
+    <div class="card-custom bg-white p-3 mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-1">
+            <h6 class="fw-bold text-potato-brown mb-0">Stok Operasional</h6>
+            <span class="small text-muted">Gas, minyak, dus, cup, es batu, dll &middot; pemakaian pada periode &middot; stok semua kasir aktif</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-modern align-middle mb-0" style="font-size: 13px;">
+                <thead><tr><th>BAHAN</th><th class="text-center">TERPAKAI</th><th class="text-center">DIKEMBALIKAN</th><th class="text-center">ISI ULANG</th><th class="text-center">STOK SAAT INI</th><th>KONDISI KASIR</th></tr></thead>
+                <tbody>
+                @forelse($stokOperasional as $o)
+                    <tr>
+                        <td class="fw-semibold text-potato-brown">{{ $o->nama }}</td>
+                        <td class="text-center">{{ $o->terpakai }} {{ $o->satuan }}</td>
+                        <td class="text-center">{{ $o->kembali }} {{ $o->satuan }}</td>
+                        <td class="text-center">{{ $o->isi_ulang }} {{ $o->satuan }}</td>
+                        <td class="text-center fw-bold">{{ $o->stok }} {{ $o->satuan }}</td>
+                        <td>
+                            @if($o->kasir_habis)<span class="badge-soft red">{{ $o->kasir_habis }} kasir habis</span>@endif
+                            @if($o->kasir_menipis)<span class="badge-soft amber">{{ $o->kasir_menipis }} kasir menipis</span>@endif
+                            @if(! $o->kasir_habis && ! $o->kasir_menipis)<span class="badge-soft green">Aman</span>@endif
+                        </td>
+                    </tr>
+                @empty
+                    <tr><td colspan="6" class="text-center text-muted py-3">Belum ada data stok operasional.</td></tr>
+                @endforelse
+                </tbody>
+            </table>
+        </div>
+
+        @if($stokOperasionalKasir->count())
+            <h6 class="fw-bold text-potato-brown mt-4 mb-2" style="font-size: 13px;">Rincian per Kasir</h6>
+            <div class="table-responsive">
+                <table class="table table-modern align-middle mb-0" style="font-size: 13px;">
+                    <thead><tr><th>KASIR</th><th>BAHAN</th><th class="text-center">TERPAKAI</th><th class="text-center">ISI ULANG</th><th class="text-center">STOK SAAT INI</th><th>STATUS</th></tr></thead>
+                    <tbody>
+                    @foreach($stokOperasionalKasir as $o)
+                        <tr>
+                            <td>{{ $o->kasir }}</td>
+                            <td class="fw-semibold text-potato-brown">{{ $o->bahan }}</td>
+                            <td class="text-center">{{ $o->terpakai }} {{ $o->satuan }}</td>
+                            <td class="text-center">{{ $o->isi_ulang }} {{ $o->satuan }}</td>
+                            <td class="text-center fw-bold">{{ $o->stok }} {{ $o->satuan }}</td>
+                            <td><span class="badge-soft {{ $warnaStatus[$o->status] }}">{{ $labelStatus[$o->status] }}</span></td>
+                        </tr>
+                    @endforeach
+                    </tbody>
+                </table>
+            </div>
+        @endif
     </div>
 
     {{-- ================= TRANSAKSI DIBATALKAN ================= --}}

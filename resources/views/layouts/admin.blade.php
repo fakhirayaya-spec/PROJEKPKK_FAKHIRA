@@ -12,7 +12,7 @@
     @include('layouts.partials.sidebar', [
         'home' => route('dashboard'),
         'roleLabel' => 'Potato Curly Crunch',
-        'fotoUser' => auth()->user()->avatar ? asset('storage/' . auth()->user()->avatar) : asset('assets_dashboard/images/SEBIN.jpg'),
+        'fotoUser' => auth()->user()->foto_url,
         'groups' => [
             'Ringkasan' => [
                 ['dashboard', 'bi-grid-1x2-fill', 'Dashboard', 'dashboard'],

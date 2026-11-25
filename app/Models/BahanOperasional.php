@@ -19,6 +19,9 @@ class BahanOperasional extends Model
         'transaksi' => 'Tiap transaksi',
     ];
 
+    /** Batasan ukuran transaksi (kosong = semua ukuran) */
+    public const UKURAN = ['Reguler' => 'Hanya ukuran Reguler', 'Jumbo' => 'Hanya ukuran Jumbo'];
+
     /** Kategori yang dipakai saat biaya bahan ini dicatat di Pengeluaran */
     public const KATEGORI_PENGELUARAN = [
         'operasional' => 'Operasional',
@@ -27,7 +30,7 @@ class BahanOperasional extends Model
 
     protected $fillable = [
         'kode', 'nama', 'satuan', 'stok_awal', 'stok_menipis',
-        'dasar_pakai', 'per_kelompok', 'unit_isi', 'isi_per_unit',
+        'dasar_pakai', 'ukuran', 'per_kelompok', 'unit_isi', 'isi_per_unit',
         'harga_per_unit', 'kategori_pengeluaran', 'gambar', 'ikon', 'status', 'urutan',
     ];
 
@@ -62,7 +65,7 @@ class BahanOperasional extends Model
         $n = max((int) $this->per_kelompok, 1);
 
         if ($this->dasar_pakai === 'transaksi') {
-            return "Berkurang 1 {$this->satuan} tiap transaksi";
+            return "Berkurang 1 {$this->satuan} tiap transaksi" . (! empty($this->ukuran) ? " yang berisi ukuran {$this->ukuran}" : '');
         }
 
         $objek = match ($this->dasar_pakai) {
@@ -71,9 +74,11 @@ class BahanOperasional extends Model
             default => 'item',
         };
 
+        $ukuran = ! empty($this->ukuran) ? " ukuran {$this->ukuran}" : '';
+
         return $n === 1
-            ? "Berkurang 1 {$this->satuan} tiap 1 {$objek}"
-            : "Berkurang 1 {$this->satuan} tiap {$n} {$objek} (per transaksi)";
+            ? "Berkurang 1 {$this->satuan} tiap 1 {$objek}{$ukuran}"
+            : "Berkurang 1 {$this->satuan} tiap {$n} {$objek}{$ukuran} (per transaksi)";
     }
 
     /** Angka awal yang muncul di kolom isi ulang: 1 kalau 1 unit = banyak stok, selain itu stok awal */

@@ -101,8 +101,21 @@ class User extends Authenticatable
         return null;
     }
 
-    public function bisaDihapus(): bool
+    /**
+     * URL foto profil. Kalau belum punya foto, tampilkan lingkaran dengan huruf pertama nama
+     * (sama seperti di Data Kasir), bukan foto orang lain.
+     */
+    public function getFotoUrlAttribute(): string
     {
-        return $this->alasanTidakBisaDihapus() === null;
+        if ($this->avatar) {
+            return asset('storage/' . $this->avatar);
+        }
+
+        $huruf = mb_strtoupper(mb_substr(trim((string) $this->name) ?: '?', 0, 1));
+        $svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#fff1cf"/>'
+            . '<text x="50" y="50" text-anchor="middle" dominant-baseline="central" font-family="Arial, sans-serif" font-size="46" font-weight="700" fill="#b86e00">'
+            . e($huruf) . '</text></svg>';
+
+        return 'data:image/svg+xml;charset=utf-8,' . rawurlencode($svg);
     }
 }

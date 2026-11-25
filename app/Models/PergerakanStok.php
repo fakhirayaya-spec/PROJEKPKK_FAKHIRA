@@ -18,6 +18,11 @@ class PergerakanStok extends Model
         return $this->belongsTo(Menu::class);
     }
 
+    public function kasir()
+    {
+        return $this->belongsTo(User::class, 'kasir_id');
+    }
+
     public function user()
     {
         return $this->belongsTo(User::class);

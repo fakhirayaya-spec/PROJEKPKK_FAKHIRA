@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BahanOperasional;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -133,6 +134,7 @@ class BahanOperasionalController extends Controller
             'stok_awal' => ['required', 'integer', 'min:0', 'max:100000'],
             'stok_menipis' => ['required', 'integer', 'min:0', 'max:100000'],
             'dasar_pakai' => ['required', Rule::in(array_keys(BahanOperasional::DASAR))],
+            'ukuran' => ['nullable', Rule::in(array_keys(BahanOperasional::UKURAN))],
             'per_kelompok' => ['nullable', 'integer', 'min:1', 'max:1000'],
             'unit_isi' => ['required', 'string', 'max:20'],
             'isi_per_unit' => ['required', 'integer', 'min:1', 'max:100000'],
@@ -149,6 +151,10 @@ class BahanOperasionalController extends Controller
             'gambar.uploaded' => 'Foto gagal diunggah. Ukuran maksimal 5 MB (dan batas upload di php.ini minimal 5M).',
         ]);
 
+        $data['ukuran'] = $data['ukuran'] ?? null;
+        if (! Schema::hasColumn('bahan_operasionals', 'ukuran')) {
+            unset($data['ukuran']); // belum php artisan migrate
+        }
         $data['per_kelompok'] = $data['dasar_pakai'] === 'transaksi' ? 1 : max((int) ($data['per_kelompok'] ?? 1), 1);
         $data['harga_per_unit'] = (int) ($data['harga_per_unit'] ?? 0);
         $data['kategori_pengeluaran'] = $data['kategori_pengeluaran'] ?? ($bahan?->kategori_pengeluaran ?: 'operasional');

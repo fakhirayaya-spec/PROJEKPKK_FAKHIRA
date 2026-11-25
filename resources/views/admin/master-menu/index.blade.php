@@ -80,7 +80,7 @@
                         <th>KATEGORI</th>
                         <th class="text-end">HARGA JUAL</th>
                         <th class="text-end">MODAL</th>
-                        <th class="text-center">STOK (TOTAL)</th>
+                        <th class="text-center">STOK STANDAR</th>
                         <th class="text-center">STATUS</th>
                         <th class="text-end">TERJUAL</th>
                         <th class="text-center">AKSI</th>
@@ -92,7 +92,7 @@
                         <td class="fw-bold text-potato-brown">{{ $menu->kode_menu }}</td>
                         <td>
                             <div class="d-flex align-items-center gap-2">
-                                <img src="{{ $menu->gambar ? asset('storage/'.$menu->gambar) : asset('assets_dashboard/images/spark-admin-free.png') }}" class="thumb-menu">
+                                <img src="{{ $menu->foto_url }}" class="thumb-menu">
                                 <div>
                                     <div class="fw-semibold text-potato-brown">{{ $menu->nama_menu }}</div>
                                     @if($menu->sausBawaan || $menu->bubukBawaan)
@@ -117,12 +117,8 @@
                             @endif
                         </td>
                         <td class="text-center">
-                            <div class="fw-bold text-potato-brown">{{ $menu->stok }}</div>
-                            @if($menu->status_stok === 'habis')
-                                <span class="badge badge-status-nonaktif" style="font-size: 10px;">Habis</span>
-                            @elseif($menu->status_stok === 'menipis')
-                                <span class="badge" style="font-size: 10px; background:#fef3c7; color:#b45309;">Menipis</span>
-                            @endif
+                            {{-- Angka tetap (stok awal/standar), tidak ikut berkurang saat ada penjualan. Stok asli ada per kasir di Manajemen Stok. --}}
+                            <div class="fw-bold text-potato-brown">{{ \App\Services\StokService::STOK_STANDAR }}</div>
                         </td>
                         <td class="text-center">
                             <span class="badge {{ $menu->status == 'aktif' ? 'badge-status-aktif' : 'badge-status-nonaktif' }} px-2 py-1">
@@ -134,6 +130,14 @@
                             <a href="{{ route('admin.menu.edit', $menu) }}" class="btn btn-sm btn-outline-secondary">
                                 <i class="bi bi-pencil-square"></i>
                             </a>
+                            @php $alasanHapus = $menu->alasanTidakBisaDihapus(); @endphp
+                            @if($alasanHapus)
+                                <span class="d-inline-block" tabindex="0" title="{{ $alasanHapus }}" data-bs-toggle="tooltip">
+                                    <button type="button" class="btn btn-sm btn-outline-danger" disabled style="pointer-events: none;">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </span>
+                            @else
                             <button type="button" class="btn btn-sm btn-outline-danger"
                                     data-bs-toggle="modal" data-bs-target="#modalHapus{{ $menu->id }}">
                                 <i class="bi bi-trash"></i>
@@ -157,6 +161,7 @@
                                     </div>
                                 </div>
                             </div>
+                            @endif
                         </td>
                     </tr>
                 @empty

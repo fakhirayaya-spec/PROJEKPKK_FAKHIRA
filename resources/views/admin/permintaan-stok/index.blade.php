@@ -22,7 +22,7 @@
     @endif
 
     <ul class="nav nav-pills mb-3 gap-1">
-        @foreach(['menunggu' => 'Menunggu', 'disetujui' => 'Disetujui', 'ditolak' => 'Ditolak', 'dibatalkan' => 'Dibatalkan', 'semua' => 'Semua'] as $k => $label)
+        @foreach(['menunggu' => 'Menunggu', 'disetujui' => 'Disetujui (tunggu kasir)', 'selesai' => 'Berhasil', 'ditolak' => 'Ditolak', 'dibatalkan' => 'Dibatalkan', 'semua' => 'Semua'] as $k => $label)
             <li class="nav-item">
                 <a class="nav-link {{ $status === $k ? 'active' : '' }}" style="{{ $status === $k ? 'background:#f5a623;color:#3d2314;' : 'color:#3d2314;' }}"
                    href="{{ route('admin.permintaan-stok.index', ['status' => $k]) }}">
@@ -52,8 +52,13 @@
                             </td>
                             <td class="text-end">{{ $p->jumlah }} {{ $p->satuan }}</td>
                             <td>
-                                @php $warna = ['menunggu' => 'warning', 'disetujui' => 'success', 'ditolak' => 'danger', 'dibatalkan' => 'secondary'][$p->status] ?? 'secondary'; @endphp
-                                <span class="badge text-bg-{{ $warna }}">{{ ucfirst($p->status) }}</span>
+                                @php $warna = ['menunggu' => 'warning', 'disetujui' => 'info', 'selesai' => 'success', 'ditolak' => 'danger', 'dibatalkan' => 'secondary'][$p->status] ?? 'secondary'; @endphp
+                                <span class="badge text-bg-{{ $warna }}">{{ ['disetujui' => 'Disetujui', 'selesai' => 'Berhasil'][$p->status] ?? ucfirst($p->status) }}</span>
+                                @if($p->status === 'disetujui')
+                                    <div class="text-muted" style="font-size: 11px;">menunggu konfirmasi kasir</div>
+                                @elseif($p->status === 'selesai' && $p->dikonfirmasi_pada)
+                                    <div class="text-muted" style="font-size: 11px;">diterima {{ $p->dikonfirmasi_pada->format('d M H:i') }}</div>
+                                @endif
                                 @if($p->ditangani_pada)
                                     <div class="text-muted" style="font-size: 11px;">{{ $p->ditangani_pada->format('d M H:i') }}@if($p->penangan) · {{ $p->penangan->name }}@endif</div>
                                 @endif
@@ -65,7 +70,7 @@
                                         data-action="{{ route('admin.permintaan-stok.setujui', $p) }}"
                                         data-nama="{{ $p->nama_item }}" data-kasir="{{ $p->kasir?->name }}"
                                         data-jumlah="{{ $p->jumlah }}" data-satuan="{{ $p->satuan }}"
-                                        data-jenis="{{ $p->jenis }}" data-harga="{{ $p->jenis === 'operasional' ? (int) ($hargaBahan[$p->bahan_kode] ?? 0) : 0 }}">
+                                        data-jenis="{{ $p->jenis }}" data-harga="{{ $p->jenis === 'operasional' ? (int) ($hargaBahan[$p->bahan_kode] ?? 0) : ($p->jenis === 'menu' ? (int) ($hargaMenu[$p->item_id] ?? 0) : 0) }}">
                                         <i class="bi bi-check-lg"></i> Setujui
                                     </button>
                                     <button type="button" class="btn btn-sm btn-outline-danger btn-tolak"
@@ -102,7 +107,7 @@
                     <label class="form-label small fw-semibold">Jumlah yang disetujui <span class="text-muted fw-normal" id="satuanSetuju"></span></label>
                     <input type="number" name="jumlah" id="inpJumlahSetuju" min="1" max="1000" required class="form-control">
                 </div>
-                <div class="mb-3">
+                <div class="mb-3" id="boxBiaya">
                     <label class="form-label small fw-semibold">Biaya pembelian (Rp) <span id="wajibBiaya" class="text-danger">*</span></label>
                     <input type="number" name="biaya" id="inpBiaya" min="0" class="form-control" placeholder="0">
                     <div class="form-text" id="infoBiaya"></div>
@@ -114,7 +119,7 @@
             </div>
             <div class="modal-footer border-0 pt-0">
                 <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
-                <button type="submit" class="btn btn-sm btn-success">Setujui & tambah stok</button>
+                <button type="submit" class="btn btn-sm btn-success">Setujui</button>
             </div>
         </form>
     </div>
@@ -153,7 +158,7 @@
         const inpBiaya = document.getElementById('inpBiaya');
 
         function hitungBiaya() {
-            if (jenis === 'operasional' && hargaSatuan > 0) {
+            if (jenis !== 'bumbu' && hargaSatuan > 0) {
                 inpBiaya.value = (parseInt(inpJumlah.value) || 0) * hargaSatuan;
             }
         }
@@ -168,12 +173,20 @@
                 hargaSatuan = parseInt(b.dataset.harga) || 0;
 
                 const wajib = jenis === 'operasional';
+                const tanpaBiaya = jenis === 'bumbu';
+                document.getElementById('boxBiaya').style.display = tanpaBiaya ? 'none' : '';
                 document.getElementById('wajibBiaya').style.display = wajib ? '' : 'none';
                 inpBiaya.required = wajib;
                 inpBiaya.value = '';
-                document.getElementById('infoBiaya').textContent = wajib
-                    ? 'Wajib, supaya tercatat di Pengeluaran' + (hargaSatuan ? ' (harga per ' + b.dataset.satuan + ' ' + rp(hargaSatuan) + ', bisa diubah).' : '.')
-                    : 'Opsional. Kalau diisi, dicatat di Pengeluaran kategori Bahan Baku.';
+                let info = '';
+                if (wajib) {
+                    info = 'Otomatis ' + (hargaSatuan ? '(harga per ' + b.dataset.satuan + ' ' + rp(hargaSatuan) + ' x jumlah)' : '') + ', tercatat di Pengeluaran. Bisa diubah.';
+                } else if (!tanpaBiaya) {
+                    info = hargaSatuan
+                        ? 'Otomatis (harga modal ' + rp(hargaSatuan) + ' x jumlah), tercatat di Pengeluaran Bahan Baku. Bisa diubah.'
+                        : 'Harga modal menu belum diisi. Isi manual kalau mau dicatat di Pengeluaran Bahan Baku.';
+                }
+                document.getElementById('infoBiaya').textContent = info;
                 hitungBiaya();
             });
         });

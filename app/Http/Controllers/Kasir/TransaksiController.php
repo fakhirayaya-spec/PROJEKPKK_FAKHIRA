@@ -78,12 +78,15 @@ class TransaksiController extends Controller
             $total = 0;
             $itemsSiap = [];
             $pakaiMenu = [];   // total qty per menu di keranjang ini
-            $pakaiBumbu = [];  // total pemakaian per bumbu di keranjang ini (1 porsi tiap qty)
+            $pakaiBumbu = [];  // total pemakaian per bumbu di keranjang ini (Jumbo = 2 porsi tiap qty)
 
             foreach ($validated['items'] as $item) {
                 $menu = Menu::lockForUpdate()->findOrFail($item['menu_id']);
 
-                $pakaiMenu[$menu->id] = ($pakaiMenu[$menu->id] ?? 0) + $item['qty'];
+                // Stok menu & bumbu yang terpakai: Reguler 1 per porsi, Jumbo 2 per porsi (qty di struk tetap jumlah porsi)
+                $unitStok = StokService::unitStok((int) $item['qty'], $item['ukuran']);
+
+                $pakaiMenu[$menu->id] = ($pakaiMenu[$menu->id] ?? 0) + $unitStok;
                 $stokMenu = StokService::stokDi($menu, $kasirId);
                 if ($stokMenu < $pakaiMenu[$menu->id]) {
                     abort(422, "Stok {$menu->nama_menu} tidak cukup (sisa di stokmu: {$stokMenu}). Minta Admin menambah stok.");
@@ -101,11 +104,11 @@ class TransaksiController extends Controller
                 $tambahanSaus = 0;
 
                 if ($sausTerkunci) {
-                    $saus = $this->pakaiBawaan($menu->sausBawaan, $item['qty'], $pakaiBumbu, $kasirId);
+                    $saus = $this->pakaiBawaan($menu->sausBawaan, $unitStok, $pakaiBumbu, $kasirId);
                     $labelSaus = $saus->nama;
                 } elseif ($bisaTambahSaus) {
                     $labelSaus = $item['saus'] ?: self::TANPA_SAUS;
-                    $saus = $this->ambilBumbu('saus', $labelSaus, self::TANPA_SAUS, $item['qty'], $pakaiBumbu, $kasirId);
+                    $saus = $this->ambilBumbu('saus', $labelSaus, self::TANPA_SAUS, $unitStok, $pakaiBumbu, $kasirId);
                     $tambahanSaus = $saus ? self::HARGA_SAUS_TAMBAHAN : 0;
                 } else {
                     $saus = null;
@@ -113,11 +116,11 @@ class TransaksiController extends Controller
                 }
 
                 if ($bubukTerkunci) {
-                    $bubuk = $this->pakaiBawaan($menu->bubukBawaan, $item['qty'], $pakaiBumbu, $kasirId);
+                    $bubuk = $this->pakaiBawaan($menu->bubukBawaan, $unitStok, $pakaiBumbu, $kasirId);
                     $labelBubuk = $bubuk->nama;
                 } elseif ($bisaPilihBubuk) {
                     $labelBubuk = $item['bubuk_tabur'] ?: self::TANPA_BUBUK;
-                    $bubuk = $this->ambilBumbu('tabur', $labelBubuk, self::TANPA_BUBUK, $item['qty'], $pakaiBumbu, $kasirId);
+                    $bubuk = $this->ambilBumbu('tabur', $labelBubuk, self::TANPA_BUBUK, $unitStok, $pakaiBumbu, $kasirId);
                 } else {
                     $bubuk = null;
                     $labelBubuk = null;
@@ -135,6 +138,7 @@ class TransaksiController extends Controller
                     'saus_model' => $saus,
                     'bubuk_model' => $bubuk,
                     'qty' => $item['qty'],
+                    'unit_stok' => $unitStok,
                     'harga_satuan' => $hargaSatuan,
                     'modal_satuan' => (int) ($menu->harga_modal ?? 0),
                     'subtotal' => $subtotal,
@@ -181,7 +185,7 @@ class TransaksiController extends Controller
                 ]);
 
                 // Kurangi stok & catat pergerakan stok keluar
-                StokService::keluar($item['menu'], $item['qty'], $kasirId);
+                StokService::keluar($item['menu'], $item['unit_stok'], $kasirId);
                 $item['menu']->increment('total_terjual', $item['qty']);
 
                 PergerakanStok::create([
@@ -189,15 +193,15 @@ class TransaksiController extends Controller
                     'user_id' => auth()->id(),
                     'kasir_id' => $kasirId,
                     'jenis' => 'keluar',
-                    'jumlah' => $item['qty'],
+                    'jumlah' => $item['unit_stok'],
                     'keterangan' => 'Transaksi ' . $transaksi->kode_transaksi,
                     'tanggal' => today(),
                 ]);
 
-                // Kurangi stok saus & bumbu tabur yang dipilih (1 porsi per qty)
+                // Kurangi stok saus & bumbu tabur yang dipilih (Reguler 1 porsi per qty, Jumbo 2)
                 foreach (['saus_model', 'bubuk_model'] as $kunci) {
                     if ($item[$kunci]) {
-                        StokService::keluar($item[$kunci], $item['qty'], $kasirId);
+                        StokService::keluar($item[$kunci], $item['unit_stok'], $kasirId, 'Transaksi ' . $transaksi->kode_transaksi);
                     }
                 }
             }

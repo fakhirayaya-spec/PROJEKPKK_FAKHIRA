@@ -4,9 +4,10 @@
 
 @section('content')
 @php
-    $menuJs = $menus->map(function ($m) {
+    $menuJs = $menus->map(function ($m) use ($stokMenu) {
         return [
             'id' => $m->id,
+            'stok' => (int) ($stokMenu[$m->id] ?? 0),
             'nama' => $m->nama_menu,
             'harga' => (int) $m->harga,
             'sausBawaan' => optional($m->sausBawaan)->nama,
@@ -106,7 +107,7 @@
                                     <select id="bMenu" class="form-select">
                                         <option value="">-- Pilih menu --</option>
                                         @foreach ($menus as $m)
-                                            <option value="{{ $m->id }}">{{ $m->nama_menu }} — Rp {{ number_format($m->harga, 0, ',', '.') }}</option>
+                                            <option value="{{ $m->id }}">{{ $m->nama_menu }} — Rp {{ number_format($m->harga, 0, ',', '.') }} · {{ ($stokMenu[$m->id] ?? 0) > 0 ? 'stok ' . $stokMenu[$m->id] : 'habis' }}</option>
                                         @endforeach
                                     </select>
                                 </div>
@@ -132,6 +133,10 @@
                                     <label class="form-label" id="judulBubuk">Bumbu tabur</label>
                                     <div id="kunciBubuk" class="opt-lock d-none"><i class="bi bi-lock-fill"></i><span id="kunciBubukNama"></span><small>sudah termasuk</small></div>
                                     <select id="bBubuk" class="form-select d-none"></select>
+                                </div>
+
+                                <div class="col-12 d-none" id="boxStok">
+                                    <div class="stok-info" id="infoStokMenu"></div>
                                 </div>
 
                                 <div class="col-12 d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -174,6 +179,10 @@
 <style>
     .opt-lock { display: inline-flex; align-items: center; gap: 8px; border: 1.5px solid #2f8f4e; background: #e6f4ea; color: #2f8f4e; border-radius: 10px; padding: 8px 13px; font-size: .84rem; font-weight: 700; }
     .opt-lock small { font-weight: 600; opacity: .8; }
+    .stok-info { display: flex; flex-wrap: wrap; gap: 8px; }
+    .stok-chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 5px 12px; font-size: .78rem; font-weight: 700; background: #e6f4ea; color: #2f8f4e; }
+    .stok-chip.menipis { background: #fff1cf; color: #b45309; }
+    .stok-chip.habis { background: #fee2e2; color: #b91c1c; }
 </style>
 @endpush
 
@@ -183,10 +192,13 @@
     const SAUS = @json($sausList->values());
     const BUBUK = @json($bubukList->values());
     const UKURAN = @json($ukuranOptions);
+    const PAKAI_UKURAN = @json(\App\Services\StokService::PAKAI_PER_PORSI);   // stok menu & bumbu terpakai per porsi (Jumbo = 2)
+    const unitStok = (qty, ukuran) => qty * (PAKAI_UKURAN[ukuran] ?? 1);
     const HARGA_SAUS = @json($hargaSausTambahan);
     const TANPA_SAUS = @json($tanpaSaus);
     const TANPA_BUBUK = @json($tanpaBubuk);
     const OLD_ITEMS = @json(old('items', []));
+    const STOK_BUMBU = @json($stokBumbu);   // 'jenis|nama' => stok milik kasir ini
 
     const byId = id => document.getElementById(id);
     const rp = n => 'Rp ' + Number(n || 0).toLocaleString('id-ID');
@@ -206,16 +218,75 @@
         };
     }
 
-    function isiSelect(sel, tanpa, daftar, hargaTambah) {
+    function isiSelect(sel, tanpa, daftar, hargaTambah, jenis) {
         sel.innerHTML = '';
         sel.add(new Option(tanpa, tanpa));
-        daftar.forEach(n => sel.add(new Option(n + (hargaTambah ? ' (+' + rp(hargaTambah) + ')' : ''), n)));
+        daftar.forEach(n => {
+            const s = STOK_BUMBU[jenis + '|' + n] ?? 0;
+            sel.add(new Option(n + (hargaTambah ? ' (+' + rp(hargaTambah) + ')' : '') + ' · ' + (s > 0 ? 'stok ' + s : 'habis'), n));
+        });
+    }
+
+    // ---- Cek stok kasir sebelum pesanan ditambahkan ----
+    function pakaiStok(daftarItem) {
+        const pakai = { menu: {}, bumbu: {} };
+        daftarItem.forEach(it => {
+            const unit = unitStok(it.qty, it.ukuran);
+            pakai.menu[it.menu_id] = (pakai.menu[it.menu_id] || 0) + unit;
+            if (it.saus && it.saus !== TANPA_SAUS) pakai.bumbu['saus|' + it.saus] = (pakai.bumbu['saus|' + it.saus] || 0) + unit;
+            if (it.bubuk_tabur && it.bubuk_tabur !== TANPA_BUBUK) pakai.bumbu['tabur|' + it.bubuk_tabur] = (pakai.bumbu['tabur|' + it.bubuk_tabur] || 0) + unit;
+        });
+        return pakai;
+    }
+
+    /** Pesan kekurangan stok pertama yang ketemu (atau null kalau semua cukup). */
+    function cekStok(daftarItem) {
+        const pakai = pakaiStok(daftarItem);
+        for (const id in pakai.menu) {
+            const m = MENUS.find(x => String(x.id) === String(id));
+            if (m && pakai.menu[id] > m.stok) {
+                return 'Stok ' + m.nama + ' di kasirmu tinggal ' + m.stok + ', sedangkan pesanan ini butuh ' + pakai.menu[id] + '. Kurangi jumlahnya atau ajukan tambah stok dulu lewat Ajukan Stok.';
+            }
+        }
+        for (const k in pakai.bumbu) {
+            const s = STOK_BUMBU[k] ?? 0;
+            if (pakai.bumbu[k] > s) {
+                return 'Stok ' + k.split('|')[1] + ' di kasirmu tinggal ' + s + ', sedangkan pesanan ini butuh ' + pakai.bumbu[k] + '. Kurangi jumlahnya atau ajukan tambah stok dulu lewat Ajukan Stok.';
+            }
+        }
+        return null;
+    }
+
+    /** Info sisa stok untuk pilihan yang sedang dipilih (sudah dikurangi yang ada di daftar pesanan). */
+    function tampilStok() {
+        const m = MENUS.find(x => String(x.id) === byId('bMenu').value);
+        const box = byId('boxStok');
+        if (!m) { box.classList.add('d-none'); return; }
+        const pakai = pakaiStok(items);
+        const qty = unitStok(Math.max(1, parseInt(byId('bQty').value) || 1), byId('bUkuran').value);
+        const a = aturan(m);
+        // Tampilkan: stok kasir, yang sudah dipakai pesanan di daftar bawah, dan sisanya
+        const chip = (label, stok, terpakai, butuh) => {
+            const sisa = stok - terpakai;
+            const cls = stok <= 0 ? 'habis' : (sisa < butuh ? 'menipis' : '');
+            const rincian = stok <= 0 ? 'stok habis' : 'stok ' + stok + (terpakai ? ' · di pesanan ' + terpakai : '') + ' · sisa ' + sisa;
+            return '<span class="stok-chip ' + cls + '"><i class="bi bi-box-seam"></i>' + esc(label) + ': ' + rincian + '</span>';
+        };
+        let html = chip(m.nama, m.stok, pakai.menu[m.id] || 0, qty);
+        const bumbu = [];
+        if (a.sausKunci) bumbu.push(['saus', m.sausBawaan]);
+        if (a.bubukKunci) bumbu.push(['tabur', m.bubukBawaan]);
+        if (a.tambahSaus && byId('bSaus').value && byId('bSaus').value !== TANPA_SAUS) bumbu.push(['saus', byId('bSaus').value]);
+        if (a.pilihBubuk && byId('bBubuk').value && byId('bBubuk').value !== TANPA_BUBUK) bumbu.push(['tabur', byId('bBubuk').value]);
+        bumbu.forEach(([j, n]) => { html += chip(n, STOK_BUMBU[j + '|' + n] ?? 0, pakai.bumbu[j + '|' + n] || 0, qty); });
+        byId('infoStokMenu').innerHTML = html;
+        box.classList.remove('d-none');
     }
 
     function perbaruiBuilder() {
         const m = MENUS.find(x => String(x.id) === byId('bMenu').value);
         ['wrapSaus', 'wrapBubuk'].forEach(id => byId(id).classList.add('d-none'));
-        if (!m) { byId('hargaPreview').textContent = rp(0); return; }
+        if (!m) { byId('hargaPreview').textContent = rp(0); tampilStok(); return; }
         const a = aturan(m);
 
         // Saus
@@ -224,7 +295,7 @@
         byId('bSaus').classList.toggle('d-none', !a.tambahSaus);
         byId('kunciSausNama').textContent = m.sausBawaan || '';
         byId('judulSaus').textContent = a.tambahSaus ? 'Tambah saus (opsional, +' + rp(HARGA_SAUS) + ')' : 'Saus';
-        if (a.tambahSaus) isiSelect(byId('bSaus'), TANPA_SAUS, SAUS, HARGA_SAUS);
+        if (a.tambahSaus) isiSelect(byId('bSaus'), TANPA_SAUS, SAUS, HARGA_SAUS, 'saus');
 
         // Bubuk tabur
         byId('wrapBubuk').classList.toggle('d-none', !(a.bubukKunci || a.pilihBubuk));
@@ -232,7 +303,7 @@
         byId('bBubuk').classList.toggle('d-none', !a.pilihBubuk);
         byId('kunciBubukNama').textContent = m.bubukBawaan || '';
         byId('judulBubuk').textContent = a.pilihBubuk ? 'Bumbu tabur (opsional, gratis)' : 'Bumbu tabur';
-        if (a.pilihBubuk) isiSelect(byId('bBubuk'), TANPA_BUBUK, BUBUK, 0);
+        if (a.pilihBubuk) isiSelect(byId('bBubuk'), TANPA_BUBUK, BUBUK, 0, 'tabur');
 
         hitungPreview();
     }
@@ -251,6 +322,7 @@
         if (!m) { byId('hargaPreview').textContent = rp(0); return; }
         const it = buatItem(m, byId('bUkuran').value, byId('bSaus').value, byId('bBubuk').value, 1);
         byId('hargaPreview').textContent = rp(it.harga);
+        tampilStok();
     }
 
     function render() {
@@ -268,6 +340,7 @@
             tr.querySelector('button').onclick = () => { items.splice(i, 1); render(); };
             body.appendChild(tr);
         });
+        tampilStok();
         byId('kosongItem').classList.toggle('d-none', items.length > 0);
         byId('tabelItem').classList.toggle('d-none', items.length === 0);
 
@@ -293,13 +366,17 @@
 
     byId('bMenu').addEventListener('change', perbaruiBuilder);
     ['bUkuran', 'bSaus', 'bBubuk'].forEach(id => byId(id).addEventListener('change', hitungPreview));
+    byId('bQty').addEventListener('input', tampilStok);
     byId('inputDp').addEventListener('input', () => { dpManual = true; render(); });
 
     byId('btnTambah').addEventListener('click', () => {
         const m = MENUS.find(x => String(x.id) === byId('bMenu').value);
         if (!m) { alert('Pilih menu dulu.'); return; }
         const qty = Math.max(1, parseInt(byId('bQty').value) || 1);
-        items.push(buatItem(m, byId('bUkuran').value, byId('bSaus').value, byId('bBubuk').value, qty));
+        const baru = buatItem(m, byId('bUkuran').value, byId('bSaus').value, byId('bBubuk').value, qty);
+        const kurangStok = cekStok([...items, baru]);
+        if (kurangStok) { alert(kurangStok); return; }
+        items.push(baru);
         byId('bQty').value = 1;
         render();
     });
@@ -307,6 +384,8 @@
     byId('formPO').addEventListener('submit', e => {
         if (!items.length) { e.preventDefault(); alert('Tambahkan minimal satu menu ke pesanan.'); return; }
         const pcs = items.reduce((a, it) => a + it.qty, 0);
+        const kurangStok = cekStok(items);
+        if (kurangStok) { e.preventDefault(); alert(kurangStok); return; }
         if (pcs < MIN_PCS) { e.preventDefault(); alert('Pre-order minimal ' + MIN_PCS + ' pcs produk. Pesanan ini baru ' + pcs + ' pcs.'); return; }
         const total = items.reduce((a, it) => a + it.harga * it.qty, 0);
         const dpMin = Math.ceil(total * {{ \App\Models\PreOrder::DP_MIN_PERSEN }} / 100);

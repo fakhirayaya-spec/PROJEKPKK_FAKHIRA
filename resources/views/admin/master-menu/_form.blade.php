@@ -87,9 +87,9 @@
                         @if ($edit)
                             <div class="input-group">
                                 <span class="input-group-text"><i class="bi bi-box-seam"></i></span>
-                                <input type="text" class="form-control" value="{{ $menu->stok }} pcs" disabled>
+                                <input type="text" class="form-control" value="{{ \App\Services\StokService::STOK_STANDAR }} pcs (stok standar)" disabled>
                             </div>
-                            <div class="form-text">Total dari semua kasir. Stok diisi per kasir lewat <b>Manajemen Stok</b> supaya tercatat di riwayat.</div>
+                            <div class="form-text">Angka tetap dan tidak berkurang. Stok asli diisi dan dilihat per kasir lewat <b>Manajemen Stok</b>.</div>
                         @else
                             <div class="input-group">
                                 <span class="input-group-text"><i class="bi bi-box-seam"></i></span>

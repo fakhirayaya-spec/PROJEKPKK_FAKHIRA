@@ -106,7 +106,7 @@
                     <div class="col-6 col-md-4 col-xxl-3 menu-item" data-nama="{{ strtolower($menu->nama_menu) }}" data-kategori="{{ $menu->kategori->nama_kategori ?? 'Lainnya' }}">
                         <button type="button" class="menu-tile" onclick="bukaModalMenu({{ $menu->id }})">
                             <div class="foto">
-                                <img src="{{ $menu->gambar ? asset('storage/' . $menu->gambar) : asset('assets_dashboard/images/spark-admin-free.png') }}" alt="" loading="lazy">
+                                <img src="{{ $menu->foto_url }}" alt="" loading="lazy">
                                 <span class="sisa {{ $menu->stok <= $menu->stok_minimum ? 'tipis' : '' }}">Sisa {{ $menu->stok }}</span>
                             </div>
                             <div class="info">
@@ -244,7 +244,7 @@
             'stok' => $m->stok,
             'sausBawaan' => optional($m->sausBawaan)->nama,
             'bubukBawaan' => optional($m->bubukBawaan)->nama,
-            'foto' => $m->gambar ? asset('storage/' . $m->gambar) : asset('assets_dashboard/images/spark-admin-free.png'),
+            'foto' => $m->foto_url,
         ];
     })->values();
     $stokBumbuJs = $stokBumbu;
@@ -252,6 +252,8 @@
 <script>
     const daftarMenu = @json($menuJs);
     const ukuranExtra = @json($ukuranOptions);
+    const FAKTOR_UKURAN = @json(\App\Services\StokService::FAKTOR_UKURAN); // Jumbo memakai 2x stok menu & bumbu
+    const faktor = u => FAKTOR_UKURAN[u] || 1;
     const stokBumbu = @json($stokBumbuJs);
     const TANPA = @json([$tanpaSaus, $tanpaBubuk]);
     const HARGA_SAUS_TAMBAHAN = @json($hargaSausTambahan);
@@ -350,8 +352,8 @@
     document.getElementById('modalMenu').addEventListener('change', hitungHargaModal);
 
     /* ---------- Cek pemakaian stok di keranjang ---------- */
-    const dipakaiMenu = id => keranjang.filter(i => i.menu_id === id).reduce((a, i) => a + i.qty, 0);
-    const dipakaiBumbu = nama => keranjang.reduce((a, i) => a + ((i.saus === nama ? i.qty : 0) + (i.bubuk_tabur === nama ? i.qty : 0)), 0);
+    const dipakaiMenu = id => keranjang.filter(i => i.menu_id === id).reduce((a, i) => a + i.qty * faktor(i.ukuran), 0);
+    const dipakaiBumbu = nama => keranjang.reduce((a, i) => a + ((i.saus === nama ? i.qty : 0) + (i.bubuk_tabur === nama ? i.qty : 0)) * faktor(i.ukuran), 0);
 
     function tambahKeKeranjang() {
         const menu = daftarMenu.find(m => m.id === menuDipilihId);
@@ -364,10 +366,12 @@
         const bubuk = a.bubukKunci ? menu.bubukBawaan : (a.bisaPilihBubuk ? nilai('bubuk') : null);
         const tambahSaus = a.bisaTambahSaus && saus !== TANPA[0];
 
-        if (dipakaiMenu(menu.id) + qty > menu.stok) return toast(`Stok ${menu.nama} tinggal ${menu.stok}.`);
+        const butuh = qty * faktor(ukuran);
+        const ket = faktor(ukuran) > 1 ? ` (ukuran ${ukuran} memakai ${butuh})` : '';
+        if (dipakaiMenu(menu.id) + butuh > menu.stok) return toast(`Stok ${menu.nama} tinggal ${menu.stok}${ket}.`);
         for (const b of [saus, bubuk]) {
             if (!b || TANPA.includes(b)) continue;
-            if (dipakaiBumbu(b) + qty > (stokBumbu[b] ?? 0)) return toast(`Stok ${b} tinggal ${stokBumbu[b] ?? 0}.`);
+            if (dipakaiBumbu(b) + butuh > (stokBumbu[b] ?? 0)) return toast(`Stok ${b} tinggal ${stokBumbu[b] ?? 0}${ket}.`);
         }
 
         const hargaSatuan = menu.harga + (ukuranExtra[ukuran] || 0) + (tambahSaus ? HARGA_SAUS_TAMBAHAN : 0);

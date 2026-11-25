@@ -52,21 +52,31 @@
 
     <div class="card-custom bg-white p-3 mb-3">
         <form method="GET" class="row g-2 align-items-center">
-            <div class="col-6 col-md-3">
+            <div class="col-6 col-md-2">
                 <label class="small text-muted mb-1 d-block">Dari</label>
                 <input type="date" name="dari" value="{{ $dari?->format('Y-m-d') }}" class="form-control form-control-sm">
             </div>
-            <div class="col-6 col-md-3">
+            <div class="col-6 col-md-2">
                 <label class="small text-muted mb-1 d-block">Sampai</label>
                 <input type="date" name="sampai" value="{{ $sampai?->format('Y-m-d') }}" class="form-control form-control-sm">
             </div>
-            <div class="col-6 col-md-3">
+            <div class="col-6 col-md-2">
                 <label class="small text-muted mb-1 d-block">Kategori</label>
                 <select name="kategori" class="form-select form-select-sm">
                     <option value="">Semua Kategori</option>
                     @foreach($labelKategori as $key => $label)
                         <option value="{{ $key }}" {{ request('kategori') == $key ? 'selected' : '' }}>{{ $label }}</option>
                     @endforeach
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="small text-muted mb-1 d-block">Kasir</label>
+                <select name="kasir" class="form-select form-select-sm">
+                    <option value="">Semua Kasir</option>
+                    @foreach($daftarKasir as $k)
+                        <option value="{{ $k->id }}" {{ $kasirDipilih === (string) $k->id ? 'selected' : '' }}>{{ $k->name }}</option>
+                    @endforeach
+                    <option value="umum" {{ $kasirDipilih === 'umum' ? 'selected' : '' }}>Umum (bukan untuk kasir)</option>
                 </select>
             </div>
             <div class="col-6 col-md-3 d-flex gap-2 align-self-end">
@@ -83,6 +93,7 @@
                     <tr>
                         <th>TANGGAL</th>
                         <th>KATEGORI</th>
+                        <th>KASIR</th>
                         <th>KETERANGAN</th>
                         <th>DICATAT OLEH</th>
                         <th class="text-end">JUMLAH</th>
@@ -99,6 +110,13 @@
                             @endphp
                             <span class="badge-soft {{ $warna }}">{{ $labelKategori[$p->kategori] }}</span>
                         </td>
+                        <td>
+                            @if($p->nama_kasir)
+                                <span class="badge-soft blue">{{ $p->nama_kasir }}</span>
+                            @else
+                                <span class="text-muted">Umum</span>
+                            @endif
+                        </td>
                         <td>{{ $p->deskripsi }}</td>
                         <td>{{ $p->pencatat->name ?? '-' }}</td>
                         <td class="text-end fw-bold text-potato-brown">Rp {{ number_format($p->jumlah, 0, ',', '.') }}</td>
@@ -111,7 +129,7 @@
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="6" class="text-center text-muted py-4">Belum ada pengeluaran tercatat untuk filter ini.</td></tr>
+                    <tr><td colspan="7" class="text-center text-muted py-4">Belum ada pengeluaran tercatat untuk filter ini.</td></tr>
                 @endforelse
                 </tbody>
             </table>

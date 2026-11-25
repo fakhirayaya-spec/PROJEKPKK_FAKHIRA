@@ -20,7 +20,7 @@
         <div class="col-12 col-lg-5">
             <div class="card-custom bg-white p-4">
                 <div class="text-center mb-3">
-                    <img src="{{ $user->avatar ? asset('storage/' . $user->avatar) : asset('assets_dashboard/images/SEBIN.jpg') }}"
+                    <img src="{{ $user->foto_url }}"
                         class="rounded-circle border border-3 border-warning mb-2" width="80" height="80"
                         style="object-fit: cover;">
                     <h6 class="fw-bold text-potato-brown mb-0">{{ $user->name }}</h6>

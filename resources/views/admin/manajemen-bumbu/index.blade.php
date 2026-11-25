@@ -34,6 +34,9 @@
                 <p>Atur daftar bumbu tabur dan saus, lalu isi stoknya per kasir. Pilihan di halaman kasir mengikuti stok miliknya.</p>
             </div>
             <div class="d-flex gap-2 flex-wrap">
+                <a href="{{ route('admin.bumbu.riwayat') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-clock-history me-1"></i> Riwayat
+                </a>
                 @if ($kasirTerpilih)
                     <button type="button" class="btn btn-outline-secondary" onclick="tampil('modalIsiSemua')">
                         <i class="bi bi-box-seam me-1"></i> Isi Semua Stok
@@ -114,6 +117,7 @@
                                     <div class="angka">
                                         <span>Sisa <b>{{ number_format($b->stok, 0, ',', '.') }}</b> {{ $b->satuan }}</span>
                                         <span>min. {{ $b->stok_minimum }}</span>
+                                        <span title="Harga per bungkus / isi">Rp{{ number_format($b->harga_bungkus_efektif, 0, ',', '.') }} / {{ $b->isi_bungkus_efektif }} pakai</span>
                                         @php
                                             $expB = isset($expTerdekat[$b->id]) ? \Carbon\Carbon::parse($expTerdekat[$b->id]) : null;
                                             $hariB = $expB ? (int) round(($expB->copy()->startOfDay()->timestamp - today()->timestamp) / 86400) : null;
@@ -135,7 +139,7 @@
                                         </button>
                                         <div class="dropdown-menu dropdown-menu-end pop">
                                             <button type="button" class="dropdown-item"
-                                                onclick="bukaEdit(@js($b->only(['id', 'nama', 'stok', 'stok_minimum', 'satuan'])))">
+                                                onclick="bukaEdit(@js($b->only(['id', 'nama', 'stok', 'stok_minimum', 'satuan']) + ['harga_per_bungkus' => $b->harga_bungkus_efektif, 'isi_per_bungkus' => $b->isi_bungkus_efektif]))">
                                                 <i class="bi bi-pencil"></i> Ubah data
                                             </button>
                                             <form method="POST" action="{{ route('admin.bumbu.toggle', $b) }}">
@@ -195,6 +199,16 @@
                         <div class="col-6">
                             <label class="form-label small">Satuan</label>
                             <input type="text" name="satuan" class="form-control" value="porsi" maxlength="20" required>
+                        </div>
+                    </div>
+                    <div class="row g-3 mt-0">
+                        <div class="col-6">
+                            <label class="form-label small">Harga per bungkus (Rp)</label>
+                            <input type="number" name="harga_per_bungkus" class="form-control" min="0" placeholder="kosong = bawaan (tabur 7.000, saus 14.000)">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small">Isi (berapa kali pakai)</label>
+                            <input type="number" name="isi_per_bungkus" class="form-control" min="1" placeholder="tabur 50, saus 25">
                         </div>
                     </div>
                     <div class="form-text mt-2">Stok awal 0. Isi stoknya per kasir lewat tombol tambah stok setelah bumbu dibuat.</div>
@@ -260,6 +274,16 @@
                         <div class="col-4">
                             <label class="form-label small">Satuan</label>
                             <input type="text" name="satuan" id="editSatuan" class="form-control" maxlength="20" required>
+                        </div>
+                    </div>
+                    <div class="row g-3 mt-0">
+                        <div class="col-6">
+                            <label class="form-label small">Harga per bungkus (Rp)</label>
+                            <input type="number" name="harga_per_bungkus" id="editHarga" class="form-control" min="0">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small">Isi (berapa kali pakai)</label>
+                            <input type="number" name="isi_per_bungkus" id="editIsi" class="form-control" min="1">
                         </div>
                     </div>
                     <div class="form-text mt-2">Angka stok di sini adalah stok kasir yang dipilih di atas. Mengubahnya berarti koreksi stok kasir itu (misalnya setelah hitung ulang).</div>
@@ -342,6 +366,8 @@
             document.getElementById('editStok').value = b.stok;
             document.getElementById('editMin').value = b.stok_minimum;
             document.getElementById('editSatuan').value = b.satuan;
+            document.getElementById('editHarga').value = b.harga_per_bungkus;
+            document.getElementById('editIsi').value = b.isi_per_bungkus;
             tampil('modalEdit');
         }
     </script>

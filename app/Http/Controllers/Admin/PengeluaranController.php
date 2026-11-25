@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Pengeluaran;
+use App\Models\User;
 use App\Support\KategoriPengeluaran;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -18,7 +19,19 @@ class PengeluaranController extends Controller
 
     public function index(Request $request)
     {
-        $request->validate(['dari' => ['nullable', 'date'], 'sampai' => ['nullable', 'date']]);
+        $request->validate(['dari' => ['nullable', 'date'], 'sampai' => ['nullable', 'date'], 'kasir' => ['nullable', 'string', 'max:20']]);
+
+        // Filter kasir: id kasir, atau "umum" (pengeluaran yang bukan untuk kasir tertentu)
+        $daftarKasir = User::kasir()->orderBy('name')->get(['id', 'name']);
+        $kasirDipilih = $request->filled('kasir') ? (string) $request->kasir : null;
+        $kasirModel = ($kasirDipilih && $kasirDipilih !== 'umum') ? $daftarKasir->firstWhere('id', (int) $kasirDipilih) : null;
+        $terapkanKasir = function ($q) use ($kasirDipilih, $kasirModel) {
+            if ($kasirDipilih === 'umum') {
+                $q->umum();
+            } elseif ($kasirModel) {
+                $q->untukKasir($kasirModel->name);
+            }
+        };
 
         // Tanpa filter tanggal = tampilkan SEMUA periode (dulu default-nya hanya bulan berjalan,
         // jadi pengeluaran bulan lain terlihat "tidak masuk").
@@ -29,6 +42,7 @@ class PengeluaranController extends Controller
         }
 
         $query = Pengeluaran::with('pencatat');
+        $terapkanKasir($query);
         if ($dari) {
             $query->where('tanggal', '>=', $dari->toDateString());
         }
@@ -42,6 +56,7 @@ class PengeluaranController extends Controller
 
         // Ringkasan per kategori untuk rentang tanggal yang dipilih (tidak ikut filter kategori)
         $rentang = Pengeluaran::query();
+        $terapkanKasir($rentang);
         if ($dari) {
             $rentang->where('tanggal', '>=', $dari->toDateString());
         }
@@ -62,6 +77,8 @@ class PengeluaranController extends Controller
             'dari' => $dari,
             'sampai' => $sampai,
             'labelKategori' => self::KATEGORI,
+            'daftarKasir' => $daftarKasir,
+            'kasirDipilih' => $kasirModel ? (string) $kasirModel->id : ($kasirDipilih === 'umum' ? 'umum' : ''),
         ]);
     }
 

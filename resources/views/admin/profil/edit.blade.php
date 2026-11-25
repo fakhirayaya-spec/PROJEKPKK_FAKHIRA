@@ -19,7 +19,7 @@
     <div class="row g-3">
         <div class="col-12 col-lg-4">
             <div class="card-custom bg-white p-4 text-center">
-                <img src="{{ $user->avatar ? asset('storage/' . $user->avatar) : asset('assets_dashboard/images/SEBIN.jpg') }}"
+                <img src="{{ $user->foto_url }}"
                     class="rounded-circle border border-3 border-warning mb-3" width="96" height="96" style="object-fit: cover;">
                 <h6 class="fw-bold text-potato-brown mb-0">{{ $user->name }}</h6>
                 <div class="text-muted small mb-2">{{ $user->email }}</div>

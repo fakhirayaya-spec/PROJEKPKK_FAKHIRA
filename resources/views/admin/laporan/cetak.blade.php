@@ -270,6 +270,43 @@
         </tbody>
     </table>
 
+    <h2>Laporan Stok Operasional</h2>
+    <table>
+        <thead><tr><th>Bahan</th><th class="c">Terpakai (Periode)</th><th class="c">Dikembalikan</th><th class="c">Isi Ulang</th><th class="c">Stok Saat Ini</th><th>Kondisi Kasir</th></tr></thead>
+        <tbody>
+        @forelse($stokOperasional as $o)
+            <tr>
+                <td>{{ $o->nama }}</td>
+                <td class="c">{{ $o->terpakai }} {{ $o->satuan }}</td>
+                <td class="c">{{ $o->kembali }} {{ $o->satuan }}</td>
+                <td class="c">{{ $o->isi_ulang }} {{ $o->satuan }}</td>
+                <td class="c">{{ $o->stok }} {{ $o->satuan }}</td>
+                <td>{{ ($o->kasir_habis || $o->kasir_menipis) ? trim(($o->kasir_habis ? $o->kasir_habis . ' kasir habis. ' : '') . ($o->kasir_menipis ? $o->kasir_menipis . ' kasir menipis.' : '')) : 'Aman' }}</td>
+            </tr>
+        @empty
+            <tr><td colspan="6" class="c">Belum ada data stok operasional.</td></tr>
+        @endforelse
+        </tbody>
+    </table>
+
+    @if($stokOperasionalKasir->count())
+    <table>
+        <thead><tr><th>Kasir</th><th>Bahan</th><th class="c">Terpakai</th><th class="c">Isi Ulang</th><th class="c">Stok Saat Ini</th><th>Status</th></tr></thead>
+        <tbody>
+        @foreach($stokOperasionalKasir as $o)
+            <tr>
+                <td>{{ $o->kasir }}</td>
+                <td>{{ $o->bahan }}</td>
+                <td class="c">{{ $o->terpakai }} {{ $o->satuan }}</td>
+                <td class="c">{{ $o->isi_ulang }} {{ $o->satuan }}</td>
+                <td class="c">{{ $o->stok }} {{ $o->satuan }}</td>
+                <td>{{ $labelStatus[$o->status] }}</td>
+            </tr>
+        @endforeach
+        </tbody>
+    </table>
+    @endif
+
     {{-- ================= 8. DAFTAR TRANSAKSI ================= --}}
     <h2>8. Daftar Transaksi</h2>
     <table>

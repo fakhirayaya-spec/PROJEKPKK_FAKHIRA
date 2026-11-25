@@ -47,7 +47,42 @@ class Bumbu extends Model
         ], $awal));
     }
 
-    protected $fillable = ['jenis', 'nama', 'stok', 'stok_minimum', 'satuan', 'status'];
+    protected $fillable = ['jenis', 'nama', 'stok', 'stok_minimum', 'satuan', 'status', 'harga_per_bungkus', 'isi_per_bungkus'];
+
+    /** Harga & isi bungkus bawaan per jenis: [harga per bungkus, berapa kali pakai] */
+    public const BUNGKUS_BAWAAN = [
+        'tabur' => [7000, 50],
+        'saus' => [14000, 25],
+    ];
+
+    public function getHargaBungkusEfektifAttribute(): int
+    {
+        $h = (int) ($this->attributes['harga_per_bungkus'] ?? 0);
+
+        return $h > 0 ? $h : (self::BUNGKUS_BAWAAN[$this->jenis][0] ?? 0);
+    }
+
+    public function getIsiBungkusEfektifAttribute(): int
+    {
+        $i = (int) ($this->attributes['isi_per_bungkus'] ?? 0);
+        if ((int) ($this->attributes['harga_per_bungkus'] ?? 0) > 0) {
+            return max($i, 1);
+        }
+
+        return self::BUNGKUS_BAWAAN[$this->jenis][1] ?? max($i, 1);
+    }
+
+    /** Harga satu kali pakai (1 porsi), bisa berkoma, mis. 7000/50 = 140 */
+    public function getHargaPerPakaiAttribute(): float
+    {
+        return $this->harga_bungkus_efektif / $this->isi_bungkus_efektif;
+    }
+
+    /** Biaya (Rp, dibulatkan) untuk sejumlah porsi/pakai */
+    public function biayaUntuk(int $porsi): int
+    {
+        return (int) round($porsi * $this->harga_per_pakai);
+    }
 
     public function scopeAktif($query)
     {

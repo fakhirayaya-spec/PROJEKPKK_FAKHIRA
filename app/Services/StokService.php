@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Bumbu;
 use App\Models\Menu;
 use App\Models\Pengeluaran;
+use App\Models\PergerakanBumbu;
 use App\Models\PergerakanStok;
 use App\Models\StokBatch;
 use App\Models\StokKasir;
@@ -29,6 +30,21 @@ class StokService
 {
     /** Stok standar saat admin memakai "Isi Semua Stok" (sama dengan stok di Master Menu / Bumbu). */
     public const STOK_STANDAR = 50;
+
+    /**
+     * Pemakaian stok MENU & BUMBU per porsi menurut ukuran: Jumbo memakai 2x (ada biaya tambahan).
+     * Hanya untuk stok menu & bumbu; stok operasional (gas, minyak, dus, ...) punya aturannya sendiri.
+     */
+    public const PAKAI_PER_PORSI = [
+        'Reguler' => 1,
+        'Jumbo' => 2,
+    ];
+
+    /** Jumlah stok menu/bumbu yang terpakai untuk $qty porsi ukuran $ukuran (Jumbo = 2x). */
+    public static function unitStok(int $qty, ?string $ukuran): int
+    {
+        return $qty * (self::PAKAI_PER_PORSI[$ukuran] ?? 1);
+    }
 
     /** Masa simpan standar: menu 2 minggu, bumbu 1 bulan (lebih awet) */
     public const MASA_SIMPAN_MENU = 14;
@@ -110,11 +126,37 @@ class StokService
         return StokKasir::where($kunci)->lockForUpdate()->first();
     }
 
+    /**
+     * Catat pergerakan stok BUMBU ke riwayat (menu dicatat oleh pemanggilnya lewat PergerakanStok).
+     * Aman dipanggil walau tabelnya belum ada (belum migrate): riwayat dilewati, stok tetap jalan.
+     */
+    private static function catatBumbu(Model $item, int $kasirId, string $jenis, int $jumlah, ?string $keterangan): void
+    {
+        static $ada = null;
+        $ada ??= Schema::hasTable('pergerakan_bumbus');
+
+        if (! $ada || ! $item instanceof Bumbu || $jumlah <= 0) {
+            return;
+        }
+
+        PergerakanBumbu::create([
+            'bumbu_id' => $item->id,
+            'nama' => $item->nama,
+            'user_id' => auth()->id(),
+            'kasir_id' => $kasirId,
+            'jenis' => $jenis,
+            'jumlah' => $jumlah,
+            'keterangan' => $keterangan ? mb_substr($keterangan, 0, 190) : null,
+            'tanggal' => today(),
+        ]);
+    }
+
     public static function tambah(Model $item, int $jumlah, int $kasirId, ?string $exp = null, ?string $keterangan = null): ?StokBatch
     {
         $baris = self::baris($item, $kasirId);
         $baris->increment('stok', $jumlah);
         self::hitungUlangTotal($item);
+        self::catatBumbu($item, $kasirId, 'masuk', $jumlah, $keterangan ?: 'Stok masuk');
 
         if (! self::pakaiExp($item)) {
             return null; // minuman: stok bertambah, tanpa batch/exp
@@ -209,7 +251,7 @@ class StokService
         $item->forceFill(['stok' => $total])->save();
     }
 
-    public static function keluar(Model $item, int $jumlah, int $kasirId): void
+    public static function keluar(Model $item, int $jumlah, int $kasirId, ?string $keterangan = null): void
     {
         $baris = self::baris($item, $kasirId);
         $ambil = min($jumlah, (int) $baris->stok);
@@ -217,6 +259,7 @@ class StokService
         if ($ambil > 0) {
             $baris->decrement('stok', $ambil);
             $item->decrement('stok', min($ambil, (int) $item->stok));
+            self::catatBumbu($item, $kasirId, 'keluar', $ambil, $keterangan ?: 'Terpakai');
         }
 
         if (self::pakaiExp($item)) {
@@ -224,11 +267,12 @@ class StokService
         }
     }
 
-    public static function kembali(Model $item, int $jumlah, int $kasirId): void
+    public static function kembali(Model $item, int $jumlah, int $kasirId, ?string $keterangan = null): void
     {
         $baris = self::baris($item, $kasirId);
         $baris->increment('stok', $jumlah);
         $item->increment('stok', $jumlah);
+        self::catatBumbu($item, $kasirId, 'masuk', $jumlah, $keterangan ?: 'Stok dikembalikan (pembatalan)');
 
         if (! self::pakaiExp($item)) {
             return;
@@ -274,6 +318,7 @@ class StokService
         }
 
         $baris->update(['stok' => $stokBaru]);
+        self::catatBumbu($item, $kasirId, $selisih > 0 ? 'masuk' : 'keluar', abs($selisih), $keterangan);
 
         if ($selisih > 0) {
             $item->increment('stok', $selisih);
@@ -428,6 +473,11 @@ class StokService
                     if ($kurangi > 0) {
                         $baris->decrement('stok', $kurangi);
                         $item->decrement('stok', min($kurangi, (int) $item->stok));
+
+                        if ($batch->tipe !== 'menu') {
+                            self::catatBumbu($item, (int) $batch->user_id, 'keluar', $kurangi,
+                                'Kadaluarsa otomatis (exp ' . Carbon::parse($batch->tanggal_exp)->format('d/m/Y') . ')');
+                        }
 
                         if ($batch->tipe === 'menu') {
                             PergerakanStok::create([

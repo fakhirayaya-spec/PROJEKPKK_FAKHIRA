@@ -56,12 +56,6 @@ class PreOrder extends Model
         return $this->belongsTo(Transaksi::class);
     }
 
-    /** Semua catatan pembayaran PO ini: DP (bisa lebih dari satu) dan pelunasan */
-    public function pembayaran()
-    {
-        return $this->hasMany(Transaksi::class, 'pre_order_id');
-    }
-
     public function scopeAktif($query)
     {
         return $query->whereIn('status', self::STATUS_AKTIF);
@@ -81,11 +75,6 @@ class PreOrder extends Model
     public function getSisaAttribute(): int
     {
         return max(0, (int) $this->total - (int) $this->dp);
-    }
-
-    public function getJumlahPorsiAttribute(): int
-    {
-        return (int) $this->items->sum('qty');
     }
 
     /** Nomor WhatsApp dalam format internasional (62...) untuk link wa.me */
@@ -204,7 +193,8 @@ class PreOrder extends Model
                 throw ValidationException::withMessages(['status' => "Menu \"{$item->nama_menu}\" sudah dihapus dari Master Menu, pre-order tidak bisa diproses."]);
             }
             $menus[$item->id] = $menu;
-            $pakaiMenu[$menu->id] = ($pakaiMenu[$menu->id] ?? 0) + $item->qty;
+            $unitStok = StokService::unitStok((int) $item->qty, $item->ukuran); // Jumbo = 2 per porsi
+            $pakaiMenu[$menu->id] = ($pakaiMenu[$menu->id] ?? 0) + $unitStok;
             $stokMenu = StokService::stokDi($menu, $kasirId);
             if ($stokMenu < $pakaiMenu[$menu->id]) {
                 throw ValidationException::withMessages(['status' => "Stok {$menu->nama_menu} kurang (tersedia {$stokMenu} di kasir ini, dibutuhkan {$pakaiMenu[$menu->id]}). Tambah stok kasir ini dulu di Manajemen Stok."]);
@@ -222,7 +212,7 @@ class PreOrder extends Model
                     throw ValidationException::withMessages(['status' => "\"{$nama}\" sudah tidak ada di Manajemen Bumbu."]);
                 }
                 $bumbus[$item->id][$kunci] = $bumbu;
-                $pakaiBumbu[$bumbu->id] = ($pakaiBumbu[$bumbu->id] ?? 0) + $item->qty;
+                $pakaiBumbu[$bumbu->id] = ($pakaiBumbu[$bumbu->id] ?? 0) + $unitStok;
                 $stokBumbu = StokService::stokDi($bumbu, $kasirId);
                 if ($stokBumbu < $pakaiBumbu[$bumbu->id]) {
                     throw ValidationException::withMessages(['status' => "Stok {$bumbu->nama} kurang (tersedia {$stokBumbu} di kasir ini, dibutuhkan {$pakaiBumbu[$bumbu->id]}). Tambah stok kasir ini dulu di Manajemen Bumbu."]);
@@ -232,20 +222,21 @@ class PreOrder extends Model
 
         foreach ($items as $item) {
             $menu = $menus[$item->id];
-            StokService::keluar($menu, (int) $item->qty, $kasirId);
+            $unitStok = StokService::unitStok((int) $item->qty, $item->ukuran);
+            StokService::keluar($menu, $unitStok, $kasirId);
 
             PergerakanStok::create([
                 'menu_id' => $menu->id,
                 'user_id' => $oleh->id,
                 'kasir_id' => $kasirId,
                 'jenis' => 'keluar',
-                'jumlah' => $item->qty,
+                'jumlah' => $unitStok,
                 'keterangan' => 'Pre-order ' . $this->kode_preorder . ' diproses',
                 'tanggal' => today(),
             ]);
 
             foreach ($bumbus[$item->id] ?? [] as $bumbu) {
-                StokService::keluar($bumbu, (int) $item->qty, $kasirId);
+                StokService::keluar($bumbu, $unitStok, $kasirId, 'Pre-order ' . $this->kode_preorder . ' diproses');
             }
         }
 
@@ -258,16 +249,17 @@ class PreOrder extends Model
         $kasirId = (int) ($this->user_id ?: $oleh->id);
 
         foreach ($this->items()->get() as $item) {
+            $unitStok = StokService::unitStok((int) $item->qty, $item->ukuran);
             $menu = $item->menu_id ? Menu::lockForUpdate()->find($item->menu_id) : null;
             if ($menu) {
-                StokService::kembali($menu, (int) $item->qty, $kasirId);
+                StokService::kembali($menu, $unitStok, $kasirId);
 
                 PergerakanStok::create([
                     'menu_id' => $menu->id,
                     'user_id' => $oleh->id,
                     'kasir_id' => $kasirId,
                     'jenis' => 'masuk',
-                    'jumlah' => $item->qty,
+                    'jumlah' => $unitStok,
                     'keterangan' => 'Batal pre-order ' . $this->kode_preorder,
                     'tanggal' => today(),
                 ]);
@@ -280,7 +272,7 @@ class PreOrder extends Model
                 if ($nama && $nama !== $tanpa) {
                     $bumbu = Bumbu::lockForUpdate()->where('jenis', $jenis)->where('nama', $nama)->first();
                     if ($bumbu) {
-                        StokService::kembali($bumbu, (int) $item->qty, $kasirId);
+                        StokService::kembali($bumbu, $unitStok, $kasirId, 'Batal pre-order ' . $this->kode_preorder);
                     }
                 }
             }

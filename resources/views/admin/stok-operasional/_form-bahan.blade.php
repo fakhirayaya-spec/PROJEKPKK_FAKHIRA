@@ -32,6 +32,16 @@
             @endforeach
         </select>
     </div>
+    <div class="col-12">
+        <label class="form-label small fw-semibold">Berlaku untuk ukuran</label>
+        <select name="ukuran" class="form-select">
+            <option value="">Semua ukuran (Reguler &amp; Jumbo)</option>
+            @foreach (\App\Models\BahanOperasional::UKURAN as $val => $label)
+                <option value="{{ $val }}" @selected(($b->ukuran ?? '') === $val)>{{ $label }}</option>
+            @endforeach
+        </select>
+        <div class="form-text">Contoh: Dus Kentang Besar &rarr; "Hanya ukuran Jumbo", Dus Kentang biasa &rarr; "Hanya ukuran Reguler". Jadi tiap transaksi hanya satu jenis dus yang berkurang.</div>
+    </div>
     <div class="col-12 col-md-6">
         <label class="form-label small fw-semibold">Berkurang 1 untuk tiap ... (kelipatan)</label>
         <input type="number" name="per_kelompok" class="form-control" min="1" value="{{ $b->per_kelompok ?? 1 }}">

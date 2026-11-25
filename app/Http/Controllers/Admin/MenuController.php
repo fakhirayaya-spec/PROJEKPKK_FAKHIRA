@@ -19,7 +19,8 @@ class MenuController extends Controller
         $query = Menu::with(['kategori', 'sausBawaan', 'bubukBawaan'])
             ->withSum(['transaksiItems as terjual' => function ($q) {
                 $q->whereHas('transaksi', fn ($t) => $t->where('status', 'selesai'));
-            }], 'qty');
+            }], 'qty')
+            ->withCount(['transaksiItems as jml_transaksi', 'preOrderItems as jml_po']);
 
         if ($request->filled('cari')) {
             $query->where('nama_menu', 'like', '%' . $request->cari . '%');
@@ -98,10 +99,9 @@ class MenuController extends Controller
 
     public function destroy(Menu $menu)
     {
-        // Menu yang sudah pernah terjual tidak boleh dihapus (riwayat transaksi masih memakainya)
-        if ($menu->transaksiItems()->exists()) {
-            return redirect()->route('admin.menu.index')
-                ->with('gagal', "Menu \"{$menu->nama_menu}\" sudah pernah terjual, jadi tidak bisa dihapus. Ubah statusnya jadi Nonaktif saja.");
+        // Menu yang sudah pernah dipesan (transaksi / pre-order) tidak boleh dihapus: riwayatnya masih memakainya
+        if ($alasan = $menu->alasanTidakBisaDihapus()) {
+            return redirect()->route('admin.menu.index')->with('gagal', "Menu \"{$menu->nama_menu}\": {$alasan}");
         }
 
         if ($menu->gambar) {

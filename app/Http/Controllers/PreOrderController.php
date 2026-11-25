@@ -102,8 +102,16 @@ class PreOrderController extends Controller
 
     private function dataForm(): array
     {
+        // Stok milik kasir yang sedang membuat pesanan (ditampilkan di form & dipakai untuk cek sebelum disimpan)
+        $kasirId = (int) auth()->id();
+        $petaMenu = \App\Services\StokService::petaStok('menu', $kasirId);
+        $petaBumbu = \App\Services\StokService::petaStok('bumbu', $kasirId);
+        $stokBumbu = Bumbu::aktif()->get()->mapWithKeys(fn ($b) => [$b->jenis . '|' . $b->nama => (int) ($petaBumbu[$b->id] ?? 0)]);
+
         return [
             'rp' => $this->rp(),
+            'stokMenu' => $petaMenu,
+            'stokBumbu' => $stokBumbu,
             'menus' => Menu::aktif()->with(['sausBawaan', 'bubukBawaan'])->orderBy('nama_menu')->get(),
             'sausList' => Bumbu::aktif()->jenis('saus')->orderBy('nama')->pluck('nama'),
             'bubukList' => Bumbu::aktif()->jenis('tabur')->orderBy('nama')->pluck('nama'),

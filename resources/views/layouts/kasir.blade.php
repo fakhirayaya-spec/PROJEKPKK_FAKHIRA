@@ -8,10 +8,13 @@
 @endsection
 
 @section('sidebar')
+    @php
+        try { $jmlKonfirmasi = \App\Models\PermintaanStok::where('user_id', auth()->id())->where('status', 'disetujui')->count(); } catch (\Throwable $e) { $jmlKonfirmasi = 0; }
+    @endphp
     @include('layouts.partials.sidebar', [
         'home' => route('kasir.dashboard'),
         'roleLabel' => 'Kasir',
-        'fotoUser' => auth()->user()->avatar ? asset('storage/' . auth()->user()->avatar) : asset('assets_dashboard/images/SEBIN.jpg'),
+        'fotoUser' => auth()->user()->foto_url,
         'groups' => [
             'Kasir' => [
                 ['kasir.dashboard', 'bi-grid-1x2-fill', 'Dashboard', 'kasir.dashboard'],
@@ -21,8 +24,9 @@
             ],
             'Info' => [
                 ['kasir.stok.index', 'bi-boxes', 'Cek Stok', 'kasir.stok.*'],
+                ['kasir.riwayat-stok.index', 'bi-clock-history', 'Riwayat Stok', 'kasir.riwayat-stok.*'],
                 ['kasir.stok-operasional.index', 'bi-fuel-pump', 'Stok Operasional', 'kasir.stok-operasional.*'],
-                ['kasir.permintaan-stok.index', 'bi-send-plus', 'Ajukan Stok', 'kasir.permintaan-stok.*'],
+                ['kasir.permintaan-stok.index', 'bi-send-plus', 'Ajukan Stok', 'kasir.permintaan-stok.*', $jmlKonfirmasi ?: null],
                 ['kasir.profil.edit', 'bi-person-circle', 'Profil', 'kasir.profil.*'],
             ],
         ],

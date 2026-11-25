@@ -1,7 +1,6 @@
 <?php
 
 use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PreOrderController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\MenuController;
@@ -10,6 +9,8 @@ use App\Http\Controllers\Admin\KasirController;
 use App\Http\Controllers\Admin\StokController;
 use App\Http\Controllers\Admin\BumbuController;
 use App\Http\Controllers\Admin\StokOperasionalController as AdminStokOperasionalController;
+use App\Http\Controllers\Admin\RiwayatStokController as AdminRiwayatStokController;
+use App\Http\Controllers\Kasir\RiwayatStokController as KasirRiwayatStokController;
 use App\Http\Controllers\Admin\BahanOperasionalController;
 use App\Http\Controllers\Admin\RiwayatTransaksiController;
 use App\Http\Controllers\Admin\LaporanController;
@@ -49,6 +50,7 @@ Route::middleware(['auth', 'role:admin'])->group(function () use ($rutePreorderL
     Route::get('/stok', [StokController::class, 'index'])->name('admin.stok.index');
     Route::post('/stok/isi-semua', [StokController::class, 'isiSemua'])->name('admin.stok.isi-semua');
     Route::post('/stok/{menu}/tambah', [StokController::class, 'tambahStok'])->name('admin.stok.tambah');
+    Route::get('/stok/riwayat', [AdminRiwayatStokController::class, 'menu'])->name('admin.stok.riwayat-semua');
     Route::get('/stok/{menu}/riwayat', [StokController::class, 'riwayat'])->name('admin.stok.riwayat');
     // Stok operasional per kasir (gas, minyak, dus, cup, es batu): admin lihat semua, isi ulang, riwayat
     Route::get('/stok-operasional', [AdminStokOperasionalController::class, 'index'])->name('admin.stok-operasional.index');
@@ -69,6 +71,7 @@ Route::middleware(['auth', 'role:admin'])->group(function () use ($rutePreorderL
     Route::get('/bumbu', [BumbuController::class, 'index'])->name('admin.bumbu.index');
     Route::post('/bumbu', [BumbuController::class, 'store'])->name('admin.bumbu.store');
     Route::put('/bumbu/{bumbu}', [BumbuController::class, 'update'])->name('admin.bumbu.update');
+    Route::get('/bumbu/riwayat', [AdminRiwayatStokController::class, 'bumbu'])->name('admin.bumbu.riwayat');
     Route::post('/bumbu/isi-semua', [BumbuController::class, 'isiSemua'])->name('admin.bumbu.isi-semua');
     Route::post('/bumbu/{bumbu}/tambah', [BumbuController::class, 'tambahStok'])->name('admin.bumbu.tambah');
     Route::patch('/bumbu/{bumbu}/toggle', [BumbuController::class, 'toggle'])->name('admin.bumbu.toggle');
@@ -92,6 +95,7 @@ Route::middleware(['auth', 'role:admin'])->group(function () use ($rutePreorderL
     // Laporan (tampilan web + cetak PDF)
     Route::get('/laporan', [LaporanController::class, 'index'])->name('admin.laporan.index');
     Route::get('/laporan/cetak', [LaporanController::class, 'cetak'])->name('admin.laporan.cetak');
+    Route::get('/laporan/excel', [LaporanController::class, 'excel'])->name('admin.laporan.excel');
 
     // Pre-order (admin hanya memantau: lihat daftar & progres)
     Route::prefix('preorder')->name('admin.preorder.')->group($rutePreorderLihat);
@@ -112,6 +116,7 @@ Route::middleware(['auth', 'role:kasir'])->prefix('kasir')->name('kasir.')->grou
     Route::post('/transaksi/{transaksi}/batal', [KasirTransaksiController::class, 'batal'])->name('transaksi.batal');
 
     Route::get('/stok', [KasirStokController::class, 'index'])->name('stok.index');
+    Route::get('/riwayat-stok', [KasirRiwayatStokController::class, 'index'])->name('riwayat-stok.index');
 
     // Stok operasional milik kasir sendiri (read-only) + riwayat pemakaiannya
     Route::get('/stok-operasional', [KasirStokOperasionalController::class, 'index'])->name('stok-operasional.index');
@@ -120,6 +125,7 @@ Route::middleware(['auth', 'role:kasir'])->prefix('kasir')->name('kasir.')->grou
     Route::get('/permintaan-stok', [KasirPermintaanStokController::class, 'index'])->name('permintaan-stok.index');
     Route::post('/permintaan-stok', [KasirPermintaanStokController::class, 'store'])->name('permintaan-stok.store');
     Route::post('/permintaan-stok/{permintaan}/batal', [KasirPermintaanStokController::class, 'batal'])->name('permintaan-stok.batal');
+    Route::post('/permintaan-stok/{permintaan}/konfirmasi', [KasirPermintaanStokController::class, 'konfirmasi'])->name('permintaan-stok.konfirmasi');
 
     Route::get('/riwayat', [KasirRiwayatController::class, 'index'])->name('riwayat.index');
 
@@ -143,14 +149,11 @@ Route::middleware(['auth', 'role:kasir'])->prefix('kasir')->name('kasir.')->grou
     Route::delete('/profil/foto', [KasirProfilController::class, 'hapusFoto'])->name('profil.foto');
 });
 
-// ============ PROFIL (SEMUA ROLE, dipakai bersama) ============
+// ============ DIPAKAI BERSAMA (SEMUA ROLE) ============
 Route::middleware('auth')->group(function () {
     // Gambar bahan operasional (dilihat admin & kasir)
     Route::get('/bahan-operasional/{bahan}/gambar', [BahanOperasionalController::class, 'gambar'])->name('bahan-operasional.gambar');
 
-    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
-    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
 require __DIR__.'/auth.php';

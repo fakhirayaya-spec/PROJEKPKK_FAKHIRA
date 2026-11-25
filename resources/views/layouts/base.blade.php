@@ -41,9 +41,7 @@
 
 <body>
     @php
-        $fotoUser = auth()->user()->avatar
-            ? asset('storage/' . auth()->user()->avatar)
-            : asset('assets_dashboard/images/SEBIN.jpg');
+        $fotoUser = auth()->user()->foto_url;
         $alertStok = $alertStok ?? collect();
         $notifPermintaan = $notifPermintaan ?? collect();
         $jumlahPermintaan = $jumlahPermintaan ?? 0;

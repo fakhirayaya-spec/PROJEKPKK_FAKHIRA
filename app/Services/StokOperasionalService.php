@@ -152,28 +152,36 @@ class StokOperasionalService
     {
         $aktif ??= self::bahanAktif();
 
-        $kentang = 0;
-        $minuman = 0;
-        $adaItem = false;
+        // Hitung per ukuran supaya bahan yang dibatasi satu ukuran (mis. dus besar = Jumbo) hanya
+        // berkurang oleh item ukuran itu. Kunci ukuran '*' = jumlah semua ukuran.
+        $kentang = ['*' => 0];
+        $minuman = ['*' => 0];
+        $adaItem = ['*' => false];
 
         foreach ($items as $item) {
-            $adaItem = true;
             $qty = (int) $item['qty'];
+            $ukuran = (string) ($item['ukuran'] ?? '');
+            $adaItem['*'] = true;
+            $adaItem[$ukuran] = true;
 
             if (self::menuMinuman($item['menu'])) {
-                $minuman += $qty;
+                $minuman['*'] += $qty;
+                $minuman[$ukuran] = ($minuman[$ukuran] ?? 0) + $qty;
             } else {
-                $kentang += $qty;
+                $kentang['*'] += $qty;
+                $kentang[$ukuran] = ($kentang[$ukuran] ?? 0) + $qty;
             }
         }
 
         $hasil = [];
         foreach ($aktif as $bahan) {
+            $u = ! empty($bahan->ukuran) ? (string) $bahan->ukuran : '*';
+
             $dasar = match ($bahan->dasar_pakai) {
-                'kentang' => $kentang,
-                'minuman' => $minuman,
-                'semua_item' => $kentang + $minuman,
-                'transaksi' => $adaItem ? 1 : 0,
+                'kentang' => $kentang[$u] ?? 0,
+                'minuman' => $minuman[$u] ?? 0,
+                'semua_item' => ($kentang[$u] ?? 0) + ($minuman[$u] ?? 0),
+                'transaksi' => ! empty($adaItem[$u]) ? 1 : 0,
                 default => 0,
             };
 
